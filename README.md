@@ -2,9 +2,9 @@ Expectra is program to simulate EXAFS from the outputs of molecular
 dynamics simulations. It also has the ability to to sample structures
 based on a harmonic potential generated from a normal modes calculation.
 
-Usage
-=====
+### Usage
 
+```
 usage: expectra [-h] [--first-shell] [--neighbor-cutoff DISTANCE]
                 [--multiple-scattering] [--rmax DISTANCE] [--S02 FACTOR]
                 [--energy-shift ENERGY] [--absorber ELEMENT]
@@ -34,3 +34,4 @@ optional arguments:
                         comma delimited list of elements to ignore in the
                         scattering calculation
   --edge EDGE           one of K, L1, L2, L3
+```
