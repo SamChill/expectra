@@ -3,18 +3,14 @@ import mpi4py.MPI
 from expectra.MPI_Import import mpi_import
 
 with mpi_import():
-    import os
-    import shutil
-    import subprocess
     import sys
-    import tempfile
 
     import numpy
 
     from expectra.aselite import read_vasp, units
 
     from expectra.exafs import exafs_first_shell, exafs_multiple_scattering
-    from expectra.io import read_xdatcar
+    from expectra.io import read_xdatcar, read_con
 
 COMM_WORLD = mpi4py.MPI.COMM_WORLD
 
@@ -105,14 +101,19 @@ def harmonic_sampler(atoms, ews, evs, temperature, iters):
         yield atoms.copy()
 
 def get_default_absorber(atoms, args):
-    if args.absorber: return args.absorber
     symbols = set(atoms.get_chemical_symbols())
+    if args.absorber:
+        if args.absorber not in symbols:
+            print 'ERROR: --absorber %s is not in the system' % args.absorber
+            sys.exit(2)
+        else:
+            return args.absorber
     if args.ignore_elements:
         symbols -= set(args.ignore_elements)
     if len(symbols) == 1:
         return list(symbols)[0]
     else:
-        print 'must specify --absorber if more than one chemical specie'
+        print 'ERROR: must specify --absorber if more than one chemical specie'
         sys.exit(2)
 
 def save_result(k, chi):
@@ -145,7 +146,10 @@ def snapshots_command(args):
     if COMM_WORLD.rank == 0:
         for filename in args.trajectories:
             print 'reading', filename
-            trajectory += read_xdatcar(filename, args.skip, args.every)
+            if filename[-3:] == 'con':
+                trajectory += read_con(filename)[args.skip::args.every]
+            else:
+                trajectory += read_xdatcar(filename, args.skip, args.every)
     trajectory = COMM_WORLD.bcast(trajectory)
 
     args.absorber = get_default_absorber(trajectory[0], args)

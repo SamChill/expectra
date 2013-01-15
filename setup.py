@@ -13,6 +13,6 @@ setup(
     long_description=open('README.txt').read(),
     install_requires=[
         'numpy >= 1.5.0',
-        'ase >= 3.5.0',
+        'mpi4py >= 1.3',
     ],
 )

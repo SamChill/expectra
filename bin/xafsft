@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 import argparse
 
-import numpy as np
 from expectra.io import read_chi, write_chir
+from expectra.feff import load_chi_dat
 from expectra.fft import xafsft, hanning_window
 
 def main():
@@ -17,18 +17,29 @@ def main():
 
     parser.add_argument('--output', '-o', type=str, default='exafs.chir')
 
-    parser.add_argument('chi', metavar='exafs.chi')
+    parser.add_argument('chis', metavar='exafs.chi', nargs='+')
 
     args = parser.parse_args()
 
-    k, chi = read_chi(args.chi) 
+    chi_r_total = None
+    for chi in args.chis:
 
-    window = hanning_window(k, args.kmin, args.kmax, args.dk)
-    chi *= window
+        try:
+            k, chi = read_chi(chi) 
+        except:
+            k, chi = load_chi_dat(chi)
 
-    r, chi_r = xafsft(args.rmin, args.rmax, k, chi, args.kweight)
+        window = hanning_window(k, args.kmin, args.kmax, args.dk)
+        chi *= window
 
-    write_chir(args.output, r, chi_r)
+        r, chi_r = xafsft(args.rmin, args.rmax, k, chi, args.kweight)
+        if chi_r_total == None:
+            chi_r_total = chi_r
+        else:
+            chi_r_total += chi_r
+    chi_r_total /= float(len(args.chis))
+
+    write_chir(args.output, r, chi_r_total)
 
 if __name__ == '__main__':
     main()

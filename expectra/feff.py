@@ -2,6 +2,7 @@ import tempfile
 import os
 import subprocess
 import shutil
+import sys
 
 import numpy
 
@@ -147,12 +148,14 @@ def run_feff(atoms, absorber, feff_options={}, tmp_dir=None, get_path=False):
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     retval = p.wait()
 
+    #function to deal with errors
     def feff_error():
         print 'Problem with feff calculation in %s' % tmp_dir_path
         tmp_f = tempfile.NamedTemporaryFile(dir='.', prefix='feff.inp.')
         print 'feff.inp saved to:', tmp_f.name
         tmp_f.close()
         write_feff(tmp_f.name, atoms, absorber, feff_options)
+        shutil.rmtree(tmp_dir_path)
 
     if retval != 0:
         feff_error()
@@ -171,6 +174,7 @@ def run_feff(atoms, absorber, feff_options={}, tmp_dir=None, get_path=False):
         if line.startswith('Paths found'):
             npaths = int(line.split()[2])
             if npaths == 0:
+                shutil.rmtree(tmp_dir_path)
                 if get_path:
                     return None, None, None
                 else:

@@ -158,6 +158,11 @@ def exafs_multiple_scattering(S02, energy_shift, absorber,
                 else:
                     chi_total = chi
 
+        #in case too many ranks
+        k = COMM_WORLD.bcast(k)
+        if chi_total == None:
+            chi_total = numpy.zeros(len(k))
+
         chi_total = COMM_WORLD.allreduce(chi_total)
         chi_total /= atoms.get_chemical_symbols().count(absorber)
         chi_total /= len(trajectory)
