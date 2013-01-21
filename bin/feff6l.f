@@ -539,7 +539,7 @@ c-----------------------------------------------------------------------
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -825,7 +825,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -2157,7 +2157,7 @@ c     output: ffq only
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -2270,7 +2270,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -2672,7 +2672,7 @@ c **********************************************************************
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -2745,7 +2745,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -3580,7 +3580,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -4443,7 +4443,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -4645,7 +4645,7 @@ c          =-1, rmt=rws, no calculation possible
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -4753,7 +4753,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -4855,7 +4855,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -5057,7 +5057,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -5212,7 +5212,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -5356,7 +5356,7 @@ c     ri(npat+1), beta, eta.
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -5542,7 +5542,7 @@ c     (see comments in timrep.f or here below)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -5746,7 +5746,7 @@ c     ri(npat+1), beta, eta.
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -5866,7 +5866,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -5994,7 +5994,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -6085,7 +6085,7 @@ c     which are used only for diagnostic output.
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -6493,7 +6493,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -6960,7 +6960,7 @@ c     lmax         max l (lmax = kmax*rmt)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -7081,7 +7081,7 @@ c     hashes a path into double precision real dhash
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -7166,7 +7166,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -7363,7 +7363,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -7715,7 +7715,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -8006,7 +8006,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -8905,7 +8905,7 @@ c     returns true if line is a comment or blank line, false otherwise
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -8981,7 +8981,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -9549,7 +9549,7 @@ c--------------------------------------------------------------------
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -9714,7 +9714,7 @@ c     phmin is min value to use for |phase shift|
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -9839,7 +9839,7 @@ c        xkmin, xkmax  min and max energy mesh points to consider
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -9941,7 +9941,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -10123,7 +10123,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -10594,7 +10594,7 @@ c     xnlm= sqrt ((2l+1)(l-m)!/(l+m)!)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -11221,7 +11221,7 @@ c                order
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -11356,7 +11356,7 @@ c     Writes phase data to file PHASExx.DAT for each shell
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -11433,7 +11433,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -11551,7 +11551,7 @@ c     speed of light in louck's units (rydbergs?)
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
@@ -11802,7 +11802,7 @@ c     see LICENSE for copying details
       parameter (npotx = nphx)	!max number of unique potentials (genfmt, paths)
       parameter (nfrx = nphx)	!max number of free atom types
       parameter (novrx = 8)	!max number of overlap shells
-      parameter (natx = 250)	!max number of atoms in problem
+      parameter (natx = 1000)	!max number of atoms in problem
       parameter (ltot = 24)	!max number of ang mom (arrays 1:ltot+1)
       parameter (nrptx = 250)	!Loucks r grid used through overlap
       parameter (nex = 100)	!Number of energy points genfmt, etc.
