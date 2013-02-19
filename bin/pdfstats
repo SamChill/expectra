@@ -1,0 +1,192 @@
+#!/usr/bin/env python
+import mpi4py.MPI
+from expectra.MPI_Import import mpi_import
+
+with mpi_import():
+    import sys
+
+    from expectra.io import read_xdatcar, read_con
+    from expectra.aselite import NeighborList
+
+COMM_WORLD = mpi4py.MPI.COMM_WORLD
+
+def mpiexcepthook(type, value, traceback):
+    sys.__excepthook__(type, value, traceback)
+    sys.stderr.write("exception occured on rank %i\n" % COMM_WORLD.rank)
+    COMM_WORLD.Abort()
+sys.excepthook = mpiexcepthook
+
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--neighbor-cutoff', type=float, metavar='DISTANCE',
+            help='1st neighbor cutoff distance (default: %(default)s)', 
+            default=3.4)
+
+    parser.add_argument('--ignore-elements', type=str, metavar='ELEMENTS',
+            help='comma delimited list of elements to ignore in the ' + \
+            'pdf')
+
+    parser.add_argument('--skip', type=int, default=0,
+            help='number of frames to skip at the beginning')
+    parser.add_argument('--every', type=int, default=1,
+            help='number of frames to between each step')
+    parser.add_argument('trajectories', metavar='TRAJ', nargs='+',
+            help='trajectory file (POSCAR, con, xyz)')
+
+    args = parser.parse_args()
+
+    if args.ignore_elements:
+        args.ignore_elements = args.ignore_elements.split(',')
+
+    snapshots_command(args)
+
+class Accumulator:
+    def __init__(self, compact=False):
+        self.sums = {}
+        self.sums[1] = 0.0
+        self.sums[2] = 0.0
+        self.sums[3] = 0.0
+        self.sums[4] = 0.0
+        self.min = None
+        self.max = None
+        self.N = 0
+        self.compact = compact
+        if compact:
+            self.xs = None
+        else:
+            self.xs = []
+
+    def push_array(self, xs):
+        for x in xs: self.push(x)
+
+    def push(self, x):
+        self.N += 1
+        if not self.compact:
+            self.xs.append(x)
+
+        if self.min == None:
+            self.min = x
+        elif x < self.min:
+            self.min = x
+
+        if self.max == None:
+            self.max = x
+        elif x > self.max:
+            self.max = x
+
+        for i in xrange(1,5):
+            self.sums[i] += x**float(i)
+
+    def mean(self):
+        return self.sums[1]/self.N
+
+    def sem(self):
+        return self.stddev()/(self.N**0.5)
+
+    def stddev(self):
+        return self.var()**0.5
+
+    def var(self):
+        var = self.sums[2]/self.N
+        var -= self.mean()**2.0
+        return var
+
+    def moment(self, m):
+        if m == 3:
+            r  = self.sums[3]/self.N 
+            r -= 3*self.mean()*self.sums[2]/self.N
+            r += 2*self.mean()**3
+        elif m == 4:
+            r  = self.sums[4]/self.N
+            r -= 4*self.mean()*self.sums[3]/self.N
+            r += 6*self.mean()**2*self.sums[2]/self.N
+            r -= 3*self.mean()**4
+
+        return r
+
+    def cumulant(self, m):
+        if m == 3:
+            r  = self.sums[3]/self.N 
+            r -= 3*self.mean()*self.sums[2]/self.N
+            r += 2*self.mean()**3
+        elif m == 4:
+            r  = self.sums[4]/self.N
+            r -= 4*self.mean()*self.sums[3]/self.N
+            r -= 3*(self.sums[2]/self.N)**2
+            r += 12*self.sums[2]/self.N*self.mean()**2
+            r -= 6*self.mean()**4
+
+        return r
+
+    def describe_short(self):
+        print 'min: %.3f' % self.min,
+        print 'max: %.3f' % self.max,
+        print 'avg: %.3f' % self.mean(),
+        print 'var: %.5f' % self.var(),
+        print 'c3: %.3e' % self.cumulant(3),
+        print 'c4: %.3e' % self.cumulant(4),
+        print
+
+    def describe(self):
+        print 'min:          %f' % self.min
+        print 'max:          %f' % self.max
+        print 'mean:         %f' % self.mean()
+        print 'variance:     %f' % self.var()
+        print '3rd cumulant: %f' % self.cumulant(3)
+        print '4th cumulant: %f' % self.cumulant(4)
+
+def snapshots_command(args):
+    trajectory = []
+    if COMM_WORLD.rank == 0:
+        print 'neighbor-cutoff of %.2f Angstrom' % args.neighbor_cutoff
+        for filename in args.trajectories:
+            print 'reading', filename
+            if filename[-3:] == 'con':
+                trajectory += read_con(filename)[args.skip::args.every]
+            else:
+                trajectory += read_xdatcar(filename, args.skip, args.every)
+    trajectory = COMM_WORLD.bcast(trajectory)
+
+
+    nl = None
+    acc = Accumulator()
+    for i, atoms in enumerate(trajectory):
+        #if COMM_WORLD.rank == 0:
+        #    print 'step %i/%i' % (i, len(trajectory))
+        if i % COMM_WORLD.size != COMM_WORLD.rank: 
+            continue
+        atoms = atoms.copy()
+        if args.ignore_elements:
+            ignore_indicies = [atom.index for atom in atoms 
+                               if atom.symbol in args.ignore_elements]
+            del atoms[ignore_indicies]
+        if nl == None:
+            nl = NeighborList(len(atoms)*[args.neighbor_cutoff], skin=0.3, 
+                    self_interaction=False)
+        nl.update(atoms)
+
+        for j in xrange(len(atoms)):
+            indicies, offsets = nl.get_neighbors(j)
+            for k, offset in zip(indicies, offsets):
+                zs = [ atoms[j].symbol, atoms[k].symbol ]
+                r = atoms.get_distance(j,k,True)
+                if r >= args.neighbor_cutoff: continue
+                acc.push(r)
+
+        print '%4i/%i: N: %.2f' % (i,len(trajectory),2*acc.N/(float(i+1)*len(atoms))),
+        try:
+            acc.describe_short()
+        except:
+            pass
+
+
+    f = open('bonds.dat', 'w')
+    for x in acc.xs:
+        f.write('%.8e\n' % x)
+    f.close()
+
+if __name__ == '__main__':
+    main()
