@@ -1,20 +1,9 @@
 #!/usr/bin/env python
-import mpi4py.MPI
-from expectra.MPI_Import import mpi_import
 
-with mpi_import():
-    import sys
+import sys
 
-    from expectra.io import read_xdatcar, read_con
-    from expectra.aselite import NeighborList
-
-COMM_WORLD = mpi4py.MPI.COMM_WORLD
-
-def mpiexcepthook(type, value, traceback):
-    sys.__excepthook__(type, value, traceback)
-    sys.stderr.write("exception occured on rank %i\n" % COMM_WORLD.rank)
-    COMM_WORLD.Abort()
-sys.excepthook = mpiexcepthook
+from expectra.io import read_xdatcar, read_con
+from expectra.aselite import NeighborList
 
 def main():
     import argparse
@@ -140,24 +129,18 @@ class Accumulator:
 
 def snapshots_command(args):
     trajectory = []
-    if COMM_WORLD.rank == 0:
-        print 'neighbor-cutoff of %.2f Angstrom' % args.neighbor_cutoff
-        for filename in args.trajectories:
-            print 'reading', filename
-            if filename[-3:] == 'con':
-                trajectory += read_con(filename)[args.skip::args.every]
-            else:
-                trajectory += read_xdatcar(filename, args.skip, args.every)
-    trajectory = COMM_WORLD.bcast(trajectory)
+    print 'neighbor-cutoff of %.2f Angstrom' % args.neighbor_cutoff
+    for filename in args.trajectories:
+        print 'reading', filename
+        if filename[-3:] == 'con':
+            trajectory += read_con(filename)[args.skip::args.every]
+        else:
+            trajectory += read_xdatcar(filename, args.skip, args.every)
 
 
     nl = None
     acc = Accumulator()
     for i, atoms in enumerate(trajectory):
-        #if COMM_WORLD.rank == 0:
-        #    print 'step %i/%i' % (i, len(trajectory))
-        if i % COMM_WORLD.size != COMM_WORLD.rank: 
-            continue
         atoms = atoms.copy()
         if args.ignore_elements:
             ignore_indicies = [atom.index for atom in atoms 
