@@ -147,9 +147,12 @@ def snapshots_command(args):
         for filename in args.trajectories:
             print 'reading', filename
             if filename[-3:] == 'con':
-                trajectory += read_con(filename)[args.skip::args.every]
+                trajectory_part = read_con(filename)[args.skip::args.every]
             else:
-                trajectory += read_xdatcar(filename, args.skip, args.every)
+                trajectory_part = read_xdatcar(filename, args.skip, args.every)
+            n = len(trajectory_part)
+            print 'read %4i configurations from %s' % (n, filename)
+            trajectory += trajectory_part
     trajectory = COMM_WORLD.bcast(trajectory)
 
     args.absorber = get_default_absorber(trajectory[0], args)

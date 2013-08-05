@@ -144,10 +144,10 @@ def read_xdatcar(filename, skip=0, every=1):
         trajectory.append(a)
     return trajectory
 
-def write_chir(filename, r, chir):                                                                       
+def write_chir(filename, r, chir):
     f = open(filename, 'w') 
     for i in xrange(len(r)):
-        f.write('%e %e\n' % (r[i], numpy.abs(chir[i])))
+        f.write('%e %e\n' % (r[i], chir[i]))
     f.close()
 
 def read_chi(filename):

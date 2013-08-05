@@ -1,4 +1,5 @@
 import numpy
+from time import strftime
 from expectra.aselite import bulk, units, NeighborList
 from expectra.feff import feff_edge_number, run_feff
 
@@ -36,8 +37,6 @@ def chi_path(path, r, sig2, energy_shift, s02, N):
     if xkpmin > 0.0: n += 1
     xkmin = n*delta_k
 
-    npts = len(path['xk'])
-
     xkout = numpy.arange(xkmin, 20.0+delta_k, delta_k)
     xk0 = xkp2xk(xkout, vrcorr)
 
@@ -59,113 +58,118 @@ def chi_path(path, r, sig2, energy_shift, s02, N):
 
     return xkout, numpy.imag(chi)
 
+def exafs_reference_path(z, feff_options):
+    atoms = bulk(z, orthorhombic=True, cubic=True)
+    atoms = atoms.repeat((4,4,4))
+    center = numpy.argmin(numpy.sum((atoms.get_scaled_positions() -
+        numpy.array( (.5,.5,.5) ))**2.0, axis=1))
+    #do the bulk reference scattering calculation and get the path
+    #data from feff
+    path = run_feff(atoms, center, feff_options, get_path=True)[2]
+    return path
+
 def exafs_first_shell(S02, energy_shift, absorber, 
-        ignore_elements, edge, neighbor_cutoff, trajectory):
-        feff_options = {
-                'RMAX':str(neighbor_cutoff),
-                'HOLE':'%i %.4f' % (feff_edge_number(edge), S02),
-                'CORRECTIONS':'%.4f %.4f' % (energy_shift, 0.0),
-        }
+    ignore_elements, edge, neighbor_cutoff, trajectory):
+    feff_options = {
+            'RMAX':str(neighbor_cutoff),
+            'HOLE':'%i %.4f' % (feff_edge_number(edge), S02),
+            'CORRECTIONS':'%.4f %.4f' % (energy_shift, 0.0),
+    }
 
-        #generate the bulk reference state 
-        atoms = bulk(absorber, orthorhombic=True, cubic=True)
-        atoms = atoms.repeat((4,4,4))
-        center = numpy.argmin(numpy.sum((atoms.get_scaled_positions() -
-            numpy.array( (.5,.5,.5) ))**2.0, axis=1))
-        #do the bulk reference scattering calculation and get the path
-        #data from feff
-        path = run_feff(atoms, center, feff_options, get_path=True)[2]
+    #get the bulk reference state
+    path = exafs_reference_path(absorber, feff_options)
 
-        k = None
-        chi_total = None
+    k = None
+    chi_total = None
 
-        counter = -1
-        interactions = 0
-        nl = None
+    counter = -1
+    interactions = 0
+    nl = None
 
-        for step, atoms in enumerate(trajectory):
-            if COMM_WORLD.rank == 0:
-                print 'step %i/%i' % (step+1, len(trajectory))
-            atoms = atoms.copy()
-            if ignore_elements:
-                ignore_indicies = [atom.index for atom in atoms 
-                                   if atom.symbol in ignore_elements]
-                del atoms[ignore_indicies]
-            if nl == None:
-                nl = NeighborList(len(atoms)*[neighbor_cutoff], skin=0.3, 
-                        self_interaction=False)
-            nl.update(atoms)
+    for step, atoms in enumerate(trajectory):
+        if COMM_WORLD.rank == 0:
+            time_stamp = strftime("%F %T")
+            print '[%s] step %i/%i' % (time_stamp, step+1, len(trajectory))
+        atoms = atoms.copy()
+        if ignore_elements:
+            ignore_indicies = [atom.index for atom in atoms 
+                               if atom.symbol in ignore_elements]
+            del atoms[ignore_indicies]
+        if nl == None:
+            nl = NeighborList(len(atoms)*[neighbor_cutoff], skin=0.3, 
+                    self_interaction=False)
+        nl.update(atoms)
 
-            for i in xrange(len(atoms)):
-                if atoms[i].symbol != absorber:
-                    continue
-                indicies, offsets = nl.get_neighbors(i)
-                for j, offset in zip(indicies, offsets):
-                    counter += 1
-                    if counter % COMM_WORLD.size != COMM_WORLD.rank: 
-                        continue
-
-                    r = atoms.get_distance(i,j,True)
-                    if r >= neighbor_cutoff: continue
-                    interactions += 1
-                    k, chi = chi_path(path, r, 0.0, energy_shift, S02, 1)
-
-                    if chi_total != None:
-                        chi_total += chi
-                    else:
-                        chi_total = chi
-        chi_total = COMM_WORLD.allreduce(chi_total)
-        chi_total /= atoms.get_chemical_symbols().count(absorber)
-        chi_total /= len(trajectory)
-        chi_total *= 2
-        return k, chi_total
-
-def exafs_multiple_scattering(S02, energy_shift, absorber, 
-        ignore_elements, edge, rmax, trajectory):
-        feff_options = {
-                'RMAX':str(rmax),
-                'HOLE':'%i %.4f' % (feff_edge_number(edge), S02),
-                'CORRECTIONS':'%.4f %.4f' % (energy_shift, 0.0),
-                'NLEG':'4',
-        }
-
-        k = None
-        chi_total = None
-        counter = -1
-        for step, atoms in enumerate(trajectory):
-            if COMM_WORLD.rank == 0:
-                print 'step %i/%i' % (step+1, len(trajectory))
-            atoms = atoms.copy()
-            if ignore_elements:
-                ignore_indicies = [atom.index for atom in atoms 
-                                   if atom.symbol in ignore_elements]
-                del atoms[ignore_indicies]
-
-            for i in xrange(len(atoms)):
+        for i in xrange(len(atoms)):
+            if atoms[i].symbol != absorber:
+                continue
+            indicies, offsets = nl.get_neighbors(i)
+            for j, offset in zip(indicies, offsets):
                 counter += 1
                 if counter % COMM_WORLD.size != COMM_WORLD.rank: 
                     continue
 
-                if atoms[i].symbol != absorber:
-                    continue
-
-                k, chi = run_feff(atoms, i, feff_options)
-                if k == None and chi == None:
-                    continue
+                r = atoms.get_distance(i,j,True)
+                if r >= neighbor_cutoff: continue
+                interactions += 1
+                k, chi = chi_path(path, r, 0.0, energy_shift, S02, 1)
 
                 if chi_total != None:
                     chi_total += chi
                 else:
                     chi_total = chi
+    chi_total = COMM_WORLD.allreduce(chi_total)
+    chi_total /= atoms.get_chemical_symbols().count(absorber)
+    chi_total /= len(trajectory)
+    chi_total *= 2
+    return k, chi_total
 
-        #in case too many ranks
-        k = COMM_WORLD.bcast(k)
-        if chi_total == None:
-            chi_total = numpy.zeros(len(k))
+def exafs_multiple_scattering(S02, energy_shift, absorber, 
+    ignore_elements, edge, rmax, trajectory):
+    feff_options = {
+            'RMAX':str(rmax),
+            'HOLE':'%i %.4f' % (feff_edge_number(edge), S02),
+            'CORRECTIONS':'%.4f %.4f' % (energy_shift, 0.0),
+            'NLEG':'4',
+    }
 
-        chi_total = COMM_WORLD.allreduce(chi_total)
-        chi_total /= atoms.get_chemical_symbols().count(absorber)
-        chi_total /= len(trajectory)
+    k = None
+    chi_total = None
+    counter = -1
+    for step, atoms in enumerate(trajectory):
+        if COMM_WORLD.rank == 0:
+            time_stamp = strftime("%F %T")
+            print '[%s] step %i/%i' % (time_stamp, step+1, len(trajectory))
+        atoms = atoms.copy()
+        if ignore_elements:
+            ignore_indicies = [atom.index for atom in atoms 
+                               if atom.symbol in ignore_elements]
+            del atoms[ignore_indicies]
 
-        return k, chi_total
+        for i in xrange(len(atoms)):
+            counter += 1
+            if counter % COMM_WORLD.size != COMM_WORLD.rank: 
+                continue
 
+            if atoms[i].symbol != absorber:
+                continue
+
+            k, chi = run_feff(atoms, i, feff_options)
+            if k == None and chi == None:
+                continue
+
+            if chi_total != None:
+                chi_total += chi
+            else:
+                chi_total = chi
+
+    #in case too many ranks
+    k = COMM_WORLD.bcast(k)
+    if chi_total == None:
+        chi_total = numpy.zeros(len(k))
+
+    chi_total = COMM_WORLD.allreduce(chi_total)
+    chi_total /= atoms.get_chemical_symbols().count(absorber)
+    chi_total /= len(trajectory)
+
+    return k, chi_total

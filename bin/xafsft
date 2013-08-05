@@ -5,6 +5,8 @@ from expectra.io import read_chi, write_chir
 from expectra.feff import load_chi_dat
 from expectra.fft import xafsft, hanning_window
 
+import numpy
+
 def main():
     parser = argparse.ArgumentParser()
 
@@ -14,6 +16,7 @@ def main():
     parser.add_argument('--dk', type=float, default=1.0)
     parser.add_argument('--rmin', type=float, default=0.0)
     parser.add_argument('--rmax', type=float, default=8.0)
+    parser.add_argument('--ft-part', type=str, default='mag')
 
     parser.add_argument('--output', '-o', type=str, default='exafs.chir')
 
@@ -39,7 +42,12 @@ def main():
             chi_r_total += chi_r
     chi_r_total /= float(len(args.chis))
 
-    write_chir(args.output, r, chi_r_total)
+    if args.ft_part[0] == 'm':
+        write_chir(args.output, r, numpy.abs(chi_r_total))
+    elif args.ft_part[0] == 'i':
+        write_chir(args.output, r, numpy.imag(chi_r_total))
+    elif args.ft_part[0] == 'r':
+        write_chir(args.output, r, numpy.real(chi_r_total))
 
 if __name__ == '__main__':
     main()

@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 
-import sys
-
 from expectra.io import read_xdatcar, read_con
-from expectra.aselite import NeighborList
+from expectra.aselite import NeighborList, read_vasp
 
 def main():
     import argparse
@@ -11,8 +9,12 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--neighbor-cutoff', type=float, metavar='DISTANCE',
-            help='1st neighbor cutoff distance (default: %(default)s)', 
+            help='cutoff distance (default: %(default)s)', 
             default=3.4)
+
+    parser.add_argument('--neighbor-cutoff-min', type=float, metavar='DISTANCE',
+            help='minimum distance (default: %(default)s)', 
+            default=0.0)
 
     parser.add_argument('--ignore-elements', type=str, metavar='ELEMENTS',
             help='comma delimited list of elements to ignore in the ' + \
@@ -134,6 +136,8 @@ def snapshots_command(args):
         print 'reading', filename
         if filename[-3:] == 'con':
             trajectory += read_con(filename)[args.skip::args.every]
+        elif filename.startswith('POSCAR') or filename.startswith('CONTCAR'):
+            trajectory = [read_vasp(filename)]
         else:
             trajectory += read_xdatcar(filename, args.skip, args.every)
 
@@ -157,9 +161,10 @@ def snapshots_command(args):
                 zs = [ atoms[j].symbol, atoms[k].symbol ]
                 r = atoms.get_distance(j,k,True)
                 if r >= args.neighbor_cutoff: continue
+                if r <= args.neighbor_cutoff_min: continue
                 acc.push(r)
 
-        print '%4i/%i: N: %.2f' % (i,len(trajectory),2*acc.N/(float(i+1)*len(atoms))),
+        print '%4i/%i: N: %.2f' % (i+1,len(trajectory),2*acc.N/(float(i+1)*len(atoms))),
         try:
             acc.describe_short()
         except:
