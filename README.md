@@ -2,6 +2,16 @@ Expectra is program to simulate EXAFS from the outputs of molecular
 dynamics simulations. It also has the ability to to sample structures
 based on a harmonic potential generated from a normal modes calculation.
 
+The EXAFS multiple scattering calculations are performed using [FEFF6-lite][feff],
+which was written at the University of Washington by J.J. Rehr and co-workers.<sup>1</sup>
+
+1. J.J. Rehr, S.I. Zabinsky and R.C. Albers,
+"High-order multiple scattering calculations of x-ray-absorption
+fine structure", *Phys. Rev. Lett.* **69**, 3397 (1992).
+
+
+[feff]: http://www.feffproject.org/
+
 ### Usage
 
 ```
