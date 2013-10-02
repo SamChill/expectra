@@ -144,10 +144,18 @@ def read_xdatcar(filename, skip=0, every=1):
         trajectory.append(a)
     return trajectory
 
-def write_chir(filename, r, chir):
+def write_chir(filename, r, chir, comments=None):
     f = open(filename, 'w') 
+
+    if type(comments) == str:
+        f.write('#%s\n' % comments)
+    elif type(comments) == list or type(comments) == tuple:
+        for comment in comments:
+            f.write('#%s\n' % comment)
+
     for i in xrange(len(r)):
         f.write('%e %e\n' % (r[i], chir[i]))
+
     f.close()
 
 def read_chi(filename):
