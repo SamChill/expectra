@@ -1,5 +1,5 @@
 #for intel fortran compiler
-FC=ifort
+FC?=ifort
 FFLAGS=-O2
 
 #for gfortran, note this needs a somewhat recent version of gfortran
