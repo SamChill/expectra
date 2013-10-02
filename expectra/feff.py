@@ -100,7 +100,7 @@ def load_feff_dat(filename):
     xlam = numpy.array(xlam)
     rep = numpy.array(rep)
 
-    return { 
+    return {
              "atoms":atoms,
              "reff":reff,
              "xk":xk,
@@ -140,12 +140,53 @@ def write_feff(filename, atoms, absorber, feff_options={}):
             pot = pot_map[atom.number]
         f.write("%f %f %f %i\n" % (atom.x, atom.y, atom.z, pot))
 
+def pbc(r, box, ibox = None):
+    """
+    Applies periodic boundary conditions.
+    Parameters:
+        r:      the vector the boundary conditions are applied to
+        box:    the box that defines the boundary conditions
+        ibox:   the inverse of the box. This will be calcluated if not provided.
+    """
+    if ibox == None:
+        ibox = numpy.linalg.inv(box)
+    vdir = numpy.dot(r, ibox)
+    vdir = (vdir % 1.0 + 1.5) % 1.0 - 0.5
+    return numpy.dot(vdir, box)
+
+def absorber_sphere(atoms, absorber, radius):
+    box = atoms.get_cell()
+    ibox = numpy.linalg.inv(box)
+    pos = atoms.get_positions()
+    elements = atoms.get_chemical_symbols()
+    atoms_sphere = [Atom(elements[absorber], (0.,0.,0.))]
+    for i in xrange(len(atoms)):
+        if i == absorber: continue
+        r = pbc(pos[i] - pos[absorber], box, ibox)
+        d = numpy.linalg.norm(r)
+        if d <= radius:
+            atoms_sphere.append(Atom(elements[i], r))
+    return Atoms(atoms_sphere)
+
 def run_feff(atoms, absorber, feff_options={}, tmp_dir=None, get_path=False):
     tmp_dir_path = tempfile.mkdtemp(prefix="tmp_feff_", dir=tmp_dir)
     feff_inp_path = os.path.join(tmp_dir_path, "feff.inp")
-    write_feff(feff_inp_path, atoms, absorber, feff_options)
-    p = subprocess.Popen(["feff"], cwd=tmp_dir_path, 
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    if any(atoms.get_pbc()):
+        #pick out a sphere around the absorber atom, important for PBC to work with feff
+        #atom index 0 is now the absorber
+        atoms = absorber_sphere(atoms, absorber, radius=float(feff_options['RMAX'])+0.01)
+        write_feff(feff_inp_path, atoms, 0, feff_options)
+    else:
+        write_feff(feff_inp_path, atoms, absorber, feff_options)
+
+    try:
+        p = subprocess.Popen(["feff"], cwd=tmp_dir_path,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except OSError:
+        from sys import exit, stderr
+        stderr.write('unable to locate feff executable in PATH\n')
+        exit(1)
     retval = p.wait()
 
     #function to deal with errors
