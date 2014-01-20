@@ -176,9 +176,9 @@ def run_feff(atoms, absorber, feff_options={}, tmp_dir=None, get_path=False):
         #pick out a sphere around the absorber atom, important for PBC to work with feff
         #atom index 0 is now the absorber
         atoms = absorber_sphere(atoms, absorber, radius=float(feff_options['RMAX'])+0.01)
-        write_feff(feff_inp_path, atoms, 0, feff_options)
-    else:
-        write_feff(feff_inp_path, atoms, absorber, feff_options)
+        absorber = 0
+
+    write_feff(feff_inp_path, atoms, absorber, feff_options)
 
     try:
         p = subprocess.Popen(["feff"], cwd=tmp_dir_path,
