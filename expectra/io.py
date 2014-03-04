@@ -134,6 +134,7 @@ def read_xdatcar(filename, skip=0, every=1):
         a.masses = [1.0] * len(a)
         a.set_chemical_symbols(''.join([n*e for (n, e) in zip(natoms, elements)]))
         a.cell = cell.copy()
+        a.set_pbc((True, True, True))
         j = 0
         for N, e in zip(natoms, elements):
             for k in range(N):

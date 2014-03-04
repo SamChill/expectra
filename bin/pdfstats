@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import numpy
 
 from expectra.io import read_xdatcar, read_con
 from expectra.aselite import NeighborList, read_vasp
@@ -151,15 +152,16 @@ def snapshots_command(args):
                                if atom.symbol in args.ignore_elements]
             del atoms[ignore_indicies]
         if nl == None:
-            nl = NeighborList(len(atoms)*[args.neighbor_cutoff], skin=0.3, 
-                    self_interaction=False)
+            nl = NeighborList(len(atoms)*[args.neighbor_cutoff/2.0], skin=0.3, 
+                    self_interaction=False, bothways=False)
         nl.update(atoms)
 
         for j in xrange(len(atoms)):
             indicies, offsets = nl.get_neighbors(j)
             for k, offset in zip(indicies, offsets):
-                zs = [ atoms[j].symbol, atoms[k].symbol ]
-                r = atoms.get_distance(j,k,True)
+                r = numpy.linalg.norm(atoms.positions[j] - (atoms.positions[k] + numpy.dot(offset, atoms.get_cell())))
+
+                #r = atoms.get_distance(j,k,True)
                 if r >= args.neighbor_cutoff: continue
                 if r <= args.neighbor_cutoff_min: continue
                 acc.push(r)
