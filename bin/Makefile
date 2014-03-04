@@ -1,9 +1,11 @@
-#for intel fortran compiler
-FC?=ifort
+#note this needs a somewhat recent version of gfortran
+#version 4.1 is known not to work
+FC=gfortran
 FFLAGS=-O2
 
-#for gfortran, note this needs a somewhat recent version of gfortran
-#version 4.1 is known not to work
+#for ifort
+#FC=ifort
+
 #FC=gfortran
 #FFLAGS=-O2
 
