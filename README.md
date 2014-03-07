@@ -18,14 +18,12 @@ fine structure", *Phys. Rev. Lett.* **69**, 3397 (1992).
 usage: expectra [-h] [--first-shell] [--neighbor-cutoff DISTANCE]
                 [--multiple-scattering] [--rmax DISTANCE] [--S02 FACTOR]
                 [--energy-shift ENERGY] [--absorber ELEMENT]
-                [--ignore-elements ELEMENTS] [--edge EDGE]
-                {snapshots,modes} ...
+                [--ignore-elements ELEMENTS] [--edge EDGE] [--skip SKIP]
+                [--every EVERY]
+                TRAJ [TRAJ ...]
 
 positional arguments:
-  {snapshots,modes}     sub-command help
-    snapshots           average EXAFS signal from snapshots of a trajectory
-    modes               average EXAFS signal from harmonic approximation using
-                        normal modes
+  TRAJ                  trajectory file (POSCAR, con, xyz)
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -44,4 +42,6 @@ optional arguments:
                         comma delimited list of elements to ignore in the
                         scattering calculation
   --edge EDGE           one of K, L1, L2, L3
+  --skip SKIP           number of frames to skip at the beginning
+  --every EVERY         number of frames to between each step
 ```
