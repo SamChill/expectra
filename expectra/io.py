@@ -145,6 +145,55 @@ def read_xdatcar(filename, skip=0, every=1):
         trajectory.append(a)
     return trajectory
 
+def read_vasp_multiframe(filename):
+    try:
+        xdat = read_xdatcar(filename)
+        if type(xdat) == list and len(xdat) > 1:
+            return xdat
+    except:
+        pass
+    f = open(filename, 'r')
+    data = []
+    while True:
+        try:
+            data.append(ase.io.read(f, format='vasp'))
+        except:
+            f.close()
+            break
+    if len(data) < 1:
+        raise IOError, "Could not read file %s as vasp file." % filename
+    if len(data) < 2:
+        return data[0]
+    return data
+
+def read_xdatcar(filename, skip=0, every=1):
+    f = open(filename, 'r')
+    lines = f.readlines()
+    f.close()
+    lattice_constant = float(lines[1].strip())
+    cell = numpy.array([[float(x) * lattice_constant for x in lines[2].split()], 
+                        [float(x) * lattice_constant for x in lines[3].split()], 
+                        [float(x) * lattice_constant for x in lines[4].split()]])
+    elements = lines[5].split()
+    natoms = [int(x) for x in lines[6].split()]
+    nframes = (len(lines)-7)/(sum(natoms) + 1)
+    trajectory = []
+    for i in range(skip, nframes, every):
+        a = Atoms('H'*sum(natoms))
+        a.masses = [1.0] * len(a)
+        a.set_chemical_symbols(''.join([n*e for (n, e) in zip(natoms, elements)]))
+        a.cell = cell.copy()
+        a.set_pbc((True, True, True))
+        j = 0
+        for N, e in zip(natoms, elements):
+            for k in range(N):
+                split = lines[8 + i * (sum(natoms) + 1) + j].split()
+                a[j].position = [float(l) for l in split[0:3]]
+                j += 1
+        a.positions = numpy.dot(a.positions, cell)
+        trajectory.append(a)
+    return trajectory
+
 def write_chir(filename, r, chir, comments=None):
     f = open(filename, 'w') 
 

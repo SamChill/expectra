@@ -3,11 +3,10 @@ import mpi4py.MPI
 from expectra.MPI_Import import mpi_import
 
 with mpi_import():
+    import argparse
     import sys
 
     import numpy
-
-    from expectra.aselite import read_vasp, units
 
     from expectra.exafs import exafs_first_shell, exafs_multiple_scattering
     from expectra.io import read_xdatcar, read_con
@@ -21,7 +20,6 @@ def mpiexcepthook(type, value, traceback):
 sys.excepthook = mpiexcepthook
 
 def main():
-    import argparse
 
     parser = argparse.ArgumentParser()
 
@@ -50,27 +48,12 @@ def main():
     parser.add_argument('--edge', type=str, help='one of K, L1, L2, L3',
                         default='K')
 
-    subparsers = parser.add_subparsers(help='sub-command help')
-    parser_snapshots = subparsers.add_parser('snapshots',
-            help='average EXAFS signal from snapshots of a trajectory')
-    parser_snapshots.add_argument('--skip', type=int, default=0,
+    parser.add_argument('--skip', type=int, default=0,
             help='number of frames to skip at the beginning')
-    parser_snapshots.add_argument('--every', type=int, default=1,
+    parser.add_argument('--every', type=int, default=1,
             help='number of frames to between each step')
-    parser_snapshots.add_argument('trajectories', metavar='TRAJ', nargs='+',
+    parser.add_argument('trajectories', metavar='TRAJ', nargs='+',
             help='trajectory file (POSCAR, con, xyz)')
-    parser_snapshots.set_defaults(func=snapshots_command)
-
-    parser_modes = subparsers.add_parser('modes',
-            help='average EXAFS signal from harmonic approximation using ' + \
-            'normal modes')
-    parser_modes.add_argument('--samples', type=int, default=100,
-            help='number of samples to average together')
-    parser_modes.add_argument('--temperature', type=float, default=298.0)
-    parser_modes.add_argument('POSITIONS', help='structure file (POSCAR, con, xyz)')
-    parser_modes.add_argument('EIGENVECTORS')
-    parser_modes.add_argument('EIGENVALUES')
-    parser_modes.set_defaults(func=modes_command)
 
     args = parser.parse_args()
 
@@ -80,68 +63,6 @@ def main():
     if args.multiple_scattering == True:
         args.first_shell = False
 
-    args.func(args)
-
-def harmonic_sampler(atoms, ews, evs, temperature, iters):
-    atoms = atoms.copy()
-    r0 = atoms.get_positions()
-
-    for iter in xrange(iters):
-        r = r0.copy()
-        for j in xrange(len(ews)):
-            stddev = numpy.sqrt( (units.kB*temperature)/ews[j])
-            #mass = 196.96655
-            #min_stddev = numpy.sqrt(0.0646562/(2.0*numpy.sqrt(ews[j]*mass)))
-            min_stddev = 0.0
-            stddev = max(min_stddev, stddev)
-            g = numpy.random.normal(loc=0, scale=stddev)
-            v = g*evs[:,j]
-            r += v.reshape(len(atoms), 3)
-        atoms.set_positions(r)
-        yield atoms.copy()
-
-def get_default_absorber(atoms, args):
-    symbols = set(atoms.get_chemical_symbols())
-    if args.absorber:
-        if args.absorber not in symbols:
-            print 'ERROR: --absorber %s is not in the system' % args.absorber
-            sys.exit(2)
-        else:
-            return args.absorber
-    if args.ignore_elements:
-        symbols -= set(args.ignore_elements)
-    if len(symbols) == 1:
-        return list(symbols)[0]
-    else:
-        print 'ERROR: must specify --absorber if more than one chemical specie'
-        sys.exit(2)
-
-def save_result(k, chi):
-    if COMM_WORLD.rank != 0: return
-    print 'saving result to chi.dat'
-    f = open('chi.dat', 'w')
-    for i in xrange(len(k)):
-        f.write("%6.3f %16.8e\n" % (k[i], chi[i]))
-    f.close()
-
-def modes_command(args):
-    atoms = read_vasp(args.POSITIONS)
-    args.absorber = get_default_absorber(atoms, args)
-    ews = numpy.loadtxt(args.EIGENVALUES, dtype=float)[6:]
-    evs = numpy.loadtxt(args.EIGENVECTORS, dtype=float)[:,6:]
-
-    ensemble = harmonic_sampler(atoms, ews, evs, args.temperature, 
-            args.samples)
-
-    #XXX: needs to be parallelized
-    trajectory = []
-    for snapshot in ensemble:
-        trajectory.append(snapshot)
-
-    k, chi = exafs_trajectory(args, trajectory)
-    save_result(k, chi)
-
-def snapshots_command(args):
     trajectory = []
     if COMM_WORLD.rank == 0:
         for filename in args.trajectories:
@@ -160,6 +81,30 @@ def snapshots_command(args):
     k, chi = exafs_trajectory(args, trajectory)
     save_result(k, chi)
 
+def save_result(k, chi):
+    if COMM_WORLD.rank != 0: return
+    print 'saving result to chi.dat'
+    f = open('chi.dat', 'w')
+    for i in xrange(len(k)):
+        f.write("%6.3f %16.8e\n" % (k[i], chi[i]))
+    f.close()
+
+def get_default_absorber(atoms, args):
+    symbols = set(atoms.get_chemical_symbols())
+    if args.absorber:
+        if args.absorber not in symbols:
+            print 'ERROR: --absorber %s is not in the system' % args.absorber
+            sys.exit(2)
+        else:
+            return args.absorber
+    if args.ignore_elements:
+        symbols -= set(args.ignore_elements)
+    if len(symbols) == 1:
+        return list(symbols)[0]
+    else:
+        print 'ERROR: must specify --absorber if more than one chemical specie'
+        sys.exit(2)
+
 def exafs_trajectory(args, trajectory):
     if args.multiple_scattering:
         k, chi = exafs_multiple_scattering(args.S02, args.energy_shift, 
@@ -171,7 +116,6 @@ def exafs_trajectory(args, trajectory):
                 args.neighbor_cutoff, trajectory)
 
     return k, chi
-    
 
 if __name__ == '__main__':
     main()

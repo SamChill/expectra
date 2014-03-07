@@ -142,7 +142,6 @@ def snapshots_command(args):
         else:
             trajectory += read_xdatcar(filename, args.skip, args.every)
 
-
     nl = None
     acc = Accumulator()
     for i, atoms in enumerate(trajectory):
