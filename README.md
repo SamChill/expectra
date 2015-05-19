@@ -12,6 +12,18 @@ fine structure", *Phys. Rev. Lett.* **69**, 3397 (1992).
 
 [feff]: http://www.feffproject.org/
 
+### Installation
+
+This program is distributed as a Python package. It makes use the Python libraries numpy and mpi4py. It will also require a Fortran compiler to build the FEFF6-lite program that is redistributed with the code.
+
+First build FEFF6-lite by running `make` in the `bin/` directory. If gfortran is installed then the executable `feff` will be produced. Next install an MPI library such as OpenMPI or MPICH2 and then you can install mpi4py and numpy. On Ubuntu the following commands should get all the dependencies installed:
+
+```
+$ sudo apt-get install build-essential gfortran python-mpi4py python-numpy
+```
+
+Once the dependencies are installed the Python package needs to be added to the `PYTHONPATH` environment variable and the path to the `bin/` folder needs to be added to the `PATH` environment variable.
+
 ### Usage
 
 ```
