@@ -1,15 +1,13 @@
 #!/usr/bin/env python
 import mpi4py.MPI
-from expectra.MPI_Import import mpi_import
 
-with mpi_import():
-    import argparse
-    import sys
+import argparse
+import sys
 
-    import numpy
+import numpy
 
-    from expectra.exafs import exafs_first_shell, exafs_multiple_scattering
-    from expectra.io import read_xdatcar, read_con
+from expectra.exafs import exafs_first_shell, exafs_multiple_scattering
+from expectra.io import read_xdatcar, read_con
 
 COMM_WORLD = mpi4py.MPI.COMM_WORLD
 
