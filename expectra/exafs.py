@@ -14,7 +14,7 @@ def xk2xkp(xk, vrcorr):
     vr = vrcorr / units.Rydberg
     xksign = numpy.sign(xk0)
     e = xksign*xk0**2 + vr
-    
+
     return getxk(e) / units.Bohr
 
 def xkp2xk(xk, vrcorr):
@@ -22,7 +22,7 @@ def xkp2xk(xk, vrcorr):
     vr = vrcorr / units.Rydberg
     xksign = numpy.sign(xk0)
     e = xksign*xk0**2 - vr
-    
+
     return getxk(e) / units.Bohr
 
 def chi_path(path, r, sig2, energy_shift, s02, N):
@@ -49,7 +49,7 @@ def chi_path(path, r, sig2, energy_shift, s02, N):
     dr = r - path['reff']
 
     chi = numpy.zeros(len(xk0), dtype=complex)
-    
+
     chi[1:]  = redfac0[1:]*s02*N*f0[1:]/(xk0[1:]*(path['reff']+dr)**2.0)
     chi[1:] *= numpy.exp(-2*path['reff']/lambda0[1:])
     chi[1:] *= numpy.exp(-2*(p0[1:]**2.0)*sig2)
@@ -68,7 +68,7 @@ def exafs_reference_path(z, feff_options):
     path = run_feff(atoms, center, feff_options, get_path=True)[2]
     return path
 
-def exafs_first_shell(S02, energy_shift, absorber, 
+def exafs_first_shell(S02, energy_shift, absorber,
     ignore_elements, edge, neighbor_cutoff, trajectory):
     feff_options = {
             'RMAX':str(neighbor_cutoff),
@@ -92,11 +92,11 @@ def exafs_first_shell(S02, energy_shift, absorber,
             print '[%s] step %i/%i' % (time_stamp, step+1, len(trajectory))
         atoms = atoms.copy()
         if ignore_elements:
-            ignore_indicies = [atom.index for atom in atoms 
+            ignore_indicies = [atom.index for atom in atoms
                                if atom.symbol in ignore_elements]
             del atoms[ignore_indicies]
-        if nl == None:
-            nl = NeighborList(len(atoms)*[neighbor_cutoff], skin=0.3, 
+        if nl is None:
+            nl = NeighborList(len(atoms)*[neighbor_cutoff], skin=0.3,
                     self_interaction=False)
         nl.update(atoms)
 
@@ -106,7 +106,7 @@ def exafs_first_shell(S02, energy_shift, absorber,
             indicies, offsets = nl.get_neighbors(i)
             for j, offset in zip(indicies, offsets):
                 counter += 1
-                if counter % COMM_WORLD.size != COMM_WORLD.rank: 
+                if counter % COMM_WORLD.size != COMM_WORLD.rank:
                     continue
 
                 r = atoms.get_distance(i,j,True)
@@ -114,7 +114,7 @@ def exafs_first_shell(S02, energy_shift, absorber,
                 interactions += 1
                 k, chi = chi_path(path, r, 0.0, energy_shift, S02, 1)
 
-                if chi_total != None:
+                if chi_total is not None:
                     chi_total += chi
                 else:
                     chi_total = chi
@@ -124,7 +124,7 @@ def exafs_first_shell(S02, energy_shift, absorber,
     chi_total *= 2
     return k, chi_total
 
-def exafs_multiple_scattering(S02, energy_shift, absorber, 
+def exafs_multiple_scattering(S02, energy_shift, absorber,
     ignore_elements, edge, rmax, trajectory):
     feff_options = {
             'RMAX':str(rmax),
@@ -142,30 +142,30 @@ def exafs_multiple_scattering(S02, energy_shift, absorber,
             print '[%s] step %i/%i' % (time_stamp, step+1, len(trajectory))
         atoms = atoms.copy()
         if ignore_elements:
-            ignore_indicies = [atom.index for atom in atoms 
+            ignore_indicies = [atom.index for atom in atoms
                                if atom.symbol in ignore_elements]
             del atoms[ignore_indicies]
 
         for i in xrange(len(atoms)):
             counter += 1
-            if counter % COMM_WORLD.size != COMM_WORLD.rank: 
+            if counter % COMM_WORLD.size != COMM_WORLD.rank:
                 continue
 
             if atoms[i].symbol != absorber:
                 continue
 
             k, chi = run_feff(atoms, i, feff_options)
-            if k == None and chi == None:
+            if k is None and chi is None:
                 continue
 
-            if chi_total != None:
+            if chi_total is not None:
                 chi_total += chi
             else:
                 chi_total = chi
 
     #in case too many ranks
     k = COMM_WORLD.bcast(k)
-    if chi_total == None:
+    if chi_total is None:
         chi_total = numpy.zeros(len(k))
 
     chi_total = COMM_WORLD.allreduce(chi_total)
