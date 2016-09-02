@@ -1,0 +1,4 @@
+include README.md
+include LICENSE.txt
+include feff/feff6l.f feff/Makefile
+exclude feff/feff
