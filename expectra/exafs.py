@@ -1,6 +1,8 @@
 import numpy
 from time import strftime
-from expectra.aselite import bulk, units, NeighborList
+from ase.build import bulk
+from ase.neighborlist import NeighborList
+from ase import units
 from expectra.feff import feff_edge_number, run_feff
 
 from mpi4py import MPI

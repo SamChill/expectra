@@ -12,6 +12,15 @@ class build_custom(build):
         self.run_command('build_feff')
         build.run(self)
 
+try:
+   import pypandoc
+   long_description = pypandoc.convert('README.md', 'rst')
+except (IOError, ImportError):
+   long_description = ''
+
+description = 'Code for simulating EXAFS calculations from molecular ' \
+              'dynamics trajectories or normal modes using FEFF'
+
 setup(
     name='expectra',
     version='0.1.0',
@@ -27,11 +36,12 @@ setup(
         'feff/feff',
     ],
     license='LICENSE.txt',
-    description='Code for EXAFS calculations from dynamics or normal modes',
-    long_description=open('README.md').read(),
+    description=description,
+    long_description=long_description,
     install_requires=[
         'numpy >= 1.5.0',
         'mpi4py >= 1.3',
+        'ase >= 3.11.0',
     ],
     cmdclass={
         'build'      : build_custom,

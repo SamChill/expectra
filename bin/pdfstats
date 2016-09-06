@@ -2,7 +2,8 @@
 import numpy
 
 from expectra.io import read_xdatcar, read_con
-from expectra.aselite import NeighborList, read_vasp
+from ase.neighborlist import NeighborList
+import ase.io
 
 def main():
     import argparse
@@ -138,7 +139,7 @@ def snapshots_command(args):
         if filename[-3:] == 'con':
             trajectory += read_con(filename)[args.skip::args.every]
         elif filename.startswith('POSCAR') or filename.startswith('CONTCAR'):
-            trajectory = [read_vasp(filename)]
+            trajectory = [ase.io.read(filename, format='vasp')]
         else:
             trajectory += read_xdatcar(filename, args.skip, args.every)
 

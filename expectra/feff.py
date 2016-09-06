@@ -6,7 +6,8 @@ import sys
 
 import numpy
 
-from expectra.aselite import Atoms, Atom
+from ase import Atoms, Atom
+
 
 def feff_edge_number(edge):
     edge_map = {}
