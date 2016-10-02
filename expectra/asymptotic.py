@@ -114,7 +114,7 @@ class Asymptotic(Dynamics):
         ro = rn.copy()
         sn = conf_e[2] - (conf_e[2] - conf_s[2])/20
         conf_o = [0.0, conf_e[1], sn]
-        #calculate the area of the triangle formed by the pseudo-dot and the base line
+        #calculate the area of the triangle formed by the pseudo-dot and the base line and use it as an initial
         cross_vect_o = self.get_area(conf_s, conf_e, conf_o)
         ao = np.absolute(cross_vect_o)
 
@@ -126,15 +126,15 @@ class Asymptotic(Dynamics):
         cross_vect_n = -1.0 
         step = 0
 
-        #cross_vect_n < 0 indicates the new dot above the base line. 
-        #we need to find the dot below the base line
-        while step < steps:
+        while (step < steps):
               step += 1
 
               rn = self.move(ro)
               conf_n = self.get_energy_chi_diff(rn)
 
-              #deal with corner situation. Update the base line accordingly
+              """
+              Deal with corner situations. Update the base line accordingly
+              """
               vect = None
               area = self.get_area(conf_e, conf_s, vect)
               if conf_n[1] < conf_e[1] and conf_n[2] > conf_s[2]:
@@ -159,6 +159,11 @@ class Asymptotic(Dynamics):
                     step = step - 1
                  continue
               
+              """
+              cross_vect_n > 0 indicates the new dot below the base line. 
+              All other corner situations have been ruled out. This dot should be in the
+              triangle defined by the conf_o and the base line.
+              """
               cross_vect_n = self.get_area(conf_s, conf_e, conf_n)
               if cross_vect_n > 0:
                  an = np.absolute(cross_vect_n) 
