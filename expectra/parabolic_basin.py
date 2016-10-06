@@ -129,6 +129,7 @@ class BasinHopping(Dynamics):
                          accept = np.exp((Uo - Un) / self.kT) > np.random.uniform()
                       else:
                          accept = False
+                         Un = dot_n[0]
 #                      self.log_chi(step)
               if Un < self.Umin:
                   # new minimum found
