@@ -1,5 +1,6 @@
 import sys
 import numpy as np
+import copy
 
 from ase.optimize.optimize import Dynamics
 from ase.optimize.fire import FIRE
@@ -26,6 +27,7 @@ class BasinHopping(Dynamics):
                  optimizer=FIRE,
                  fmax=0.1,
                  dr=0.1,
+                 cutoff=3.50,
                  ratio=0.0,
                  temperature=100 * kB,
                  logfile='-',
@@ -57,6 +59,7 @@ class BasinHopping(Dynamics):
         self.optimizer = optimizer
         self.fmax = fmax
         self.dr = dr
+        self.cutoff = cutoff
         self.ratio = ratio
         self.opt_calculator = opt_calculator
         self.exafs_calculator = exafs_calculator
@@ -65,11 +68,11 @@ class BasinHopping(Dynamics):
         self.k = None
         self.chi = None
 
-        if basin:
+        if self.basin:
            print "Basin Hopping switched on"
-        elif parabolic:
+        if self.parabolic:
            print "Parabolic pushing switched on"
-        else:
+        if not self.basin and not self.parabolic:
            print "basin and parabolic, at least one must be true"
 
         if adjust_cm:
@@ -121,34 +124,36 @@ class BasinHopping(Dynamics):
               Un = None
               while Un is None:
                   rn = self.move(ro)
-                  if np.sometrue(rn != ro):
+                  if np.sometrue(rn != ro) and not self.single_atom(rn):
                       dot_n = self.get_ES_dot(rn)
 
-                      if basin:
+                      if self.basin:
                          alpha = ratio * np.absolute(dot_n[0]-dot_o[0]) / np.absolute(dot_n[1] - dot_o[1])
                          Un = dot_n[0] + alpha * dot_n[1]
                          accept = np.exp((Uo - Un) / self.kT) > np.random.uniform()
                       else:
                          accept = False
                          Un = dot_n[0]
-#                      self.log_chi(step)
+
               if Un < self.Umin:
                   # new minimum found
                   self.Umin = Un
                   self.rmin = self.atoms.get_positions()
 
-              if self.lm_trajectory is not None:
-                  self.lm_trajectory.write(self.atoms)
 
               #accept or reject?
-              self.debug.write('%s %d\n' % ('step', step))
-              
-              if parabolic:
-                 parabola_n = self.parabolic_push(step, parabola, dot_n)
-                 print "parabola:"
-                 print(parabola_n)
-                 if cmp(parabola, parabola_n) != 0:
-                    parabola = parabola_n
+              self.debug.write('%s %d\n' % ("step", step))
+              print(str(self.parabolic))
+              old_p = copy.deepcopy(parabola)
+              if self.parabolic:
+                 self.parabolic_push(step, parabola, dot_n)
+                 print "old parabola:"
+                 print(old_p)
+                 print "new parabola:"
+                 print(parabola)
+                 test = cmp(old_p, parabola)
+                 print(test)
+                 if cmp(old_p, parabola) != 0:
                     self.logParabola(step, parabola)
                     para_accept = True
                  else:
@@ -168,7 +173,7 @@ class BasinHopping(Dynamics):
         Parabolic method to determine if accept rn or not
         """
         #only one dot in parabola
-        temp = parabola
+        temp = copy.deepcopy(parabola)
         if len(temp)==1:
            if dot_n[0] < temp[0][0] and dot_n[1] > temp[0][1]:
               parabola[0] = dot_n
@@ -296,6 +301,19 @@ class BasinHopping(Dynamics):
         atoms.set_positions(rn)
         return atoms.get_positions()
 
+    def single_atom(self, rn):
+        atoms = self.atoms
+        atoms.set_positions(rn)
+        for i in range (len(atoms)):
+            coordination = 0
+            for j in range (len(atoms)):
+                if j != i:
+                   if atoms.get_distance(i,j) < self.cutoff:
+                      coordination +=1
+            if coordination == 0:
+               return True
+        return False
+
     def find_index(self, parabola, temp):
         numb = 0
         for i in range (len(parabola)):
@@ -346,8 +364,8 @@ class BasinHopping(Dynamics):
             opt = self.optimizer(self.atoms, 
                                  logfile=self.optimizer_logfile)
             opt.run(fmax=self.fmax)
-           # if self.lm_trajectory is not None:
-           #     self.lm_trajectory.write(self.atoms)
+            if self.lm_trajectory is not None:
+                self.lm_trajectory.write(self.atoms)
 
             energy = self.atoms.get_potential_energy()
         except:
