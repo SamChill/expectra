@@ -92,7 +92,7 @@ class BasinHopping(Dynamics):
         self.rmin = self.atoms.get_positions()
         self.positions = self.atoms.get_positions()
         self.call_observers()
-        self.debug = open('debug.dat', 'w')
+        self.debug = None
 
         #'logfile' is defined in the superclass Dynamics in 'optimize.py'
 #        self.logfile.write('   name      step accept     energy         chi_difference\n')
@@ -111,6 +111,7 @@ class BasinHopping(Dynamics):
 
         #log data
         self.log_parabola = open(self.parabola_log, 'w')
+        self.debug = open('debug.dat', 'w')
 #        self.chi_log = open(self.chi_logfile, 'w')
 #        self.log_chi(-1)
 #        self.log(-1, 1, conf_o[1], conf_o[2])
@@ -144,8 +145,11 @@ class BasinHopping(Dynamics):
               
               if parabolic:
                  parabola_n = self.parabolic_push(step, parabola, dot_n)
+                 print "parabola:"
+                 print(parabola_n)
                  if cmp(parabola, parabola_n) != 0:
                     parabola = parabola_n
+                    self.logParabola(step, parabola)
                     para_accept = True
                  else:
                     para_accept = False
@@ -174,13 +178,12 @@ class BasinHopping(Dynamics):
            elif dot_n[0] < temp[0][0] and dot_n[1] < temp[0][1]:
               parabola[0] = dot_n
            
-           self.logParabola(step, parabola)
            return parabola
         
         #more than one dot in parabola
         replace = False
         for i in range(0, len(temp)):
-            #parabola may change after every cycle. Need to find new index for element temp[i]
+            #parabola may be changed after every cycle. Need to find new index for element temp[i]
             index = self.find_index(parabola, temp[i])
 
             #corner situation
@@ -250,7 +253,7 @@ class BasinHopping(Dynamics):
                #For other situations, no acition is needed
                self.debug.write('%d  %s  %d\n' % (i, 'nothing done',  index))
                continue
-        self.logParabola(step, parabola)
+#        self.logParabola(step, parabola)
         return parabola
 
     def logParabola(self, step, parabola=[]):
