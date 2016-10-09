@@ -31,13 +31,16 @@ def calc_area(y_exp, y_theory, x=None):
     if len(y_exp) != len(y_theory):
         print "Warning: number of points in chi_exp and chi_theory is not equal"
         
+    numb = min(len(y_exp),len(y_theory))
     area_diff = 0.00
-    for i in range(0, len(chi_exp)):
-        if x is not None:
-           area_diff = area_diff + (numpy.absolute(y_exp[i] - y_theory[i])) * x[i] ** 2
-        else:
-           area_diff = area_diff + (numpy.absolute(y_exp[i] - y_theory[i]))
-
+    if x is not None:
+        for i in range(0, numb):
+            diff = numpy.absolute(y_exp[i] - y_theory[i])
+            area_diff = area_diff + diff * x[i] ** 2
+    else:
+        for i in range(0, numb):
+            area_diff = area_diff + numpy.absolute(y_exp[i] - y_theory[i])
+    print ('%s: %15.6f' % ("area_diff", area_diff))
     return area_diff
 
 #linearly interpolate y values based on y_std value
@@ -56,7 +59,6 @@ def match_x(x_std, y_src, x_src, xmin, xmax):
 #      except MyValidationError as exception:
 #          print exception.message
     i = 0   
-
     while ( 0 <= i < len(x_std) and x_std[i] < xmax):
         if x_std[i] < xmin:
             i += 1
@@ -95,7 +97,7 @@ class Expectra(Calculator):
         every = 1,
         exp_file = 'chi_exp.dat',
         #Following parameters used for xafsft to calculate g_r plot
-        kweight= 2.0,
+        kweight= 2,
         dk = 1.0,
         rmin = 0.0,
         rmax = 8.0,
@@ -185,8 +187,21 @@ class Expectra(Calculator):
         os.system(expectra_cmd)
 
         if parameters.g_r:
-           print "g_r"
-           self.gr_function()
+           print "g_r enabled"
+           xafsft_para = ['xafsft',
+                          '--kmin', str(parameters.kmin),
+                          '--kmax', str(parameters.kmax),
+                          '--kweight', str(parameters.kweight),
+                          '--dk', str(parameters.dk),
+                          '--rmin', str(parameters.rmin),
+                          '--rmax', str(parameters.rmax),
+                          '--ft-part', parameters.ft_part,
+                          'chi.dat']
+           print(xafsft_para)
+           join_symbol = ' '
+           xafsft_cmd = join_symbol.join(xafsft_para)
+           print(xafsft_cmd)
+           os.system(xafsft_cmd)
            inputfile = 'exafs.chir'
            xmin = parameters.rmin
            xmax = parameters.rmax
@@ -203,9 +218,9 @@ class Expectra(Calculator):
 
         #load experimental chi data
         try:
-            x_exp, y_exp = read_chi(parameters.exp_chi_file) 
+            x_exp, y_exp = read_chi(parameters.exp_file) 
         except:
-            x_exp, y_exp = load_chi_dat(parameters.exp_chi_file)
+            x_exp, y_exp = load_chi_dat(parameters.exp_file)
 
         filename2 = 'test_exp_chi.dat'
         save_result(x_exp, y_exp, filename2)
@@ -218,14 +233,21 @@ class Expectra(Calculator):
         self.y = y_thy
 
         filename2 = 'rescaled_exp_chi.dat'
+        save_result(x_thy, y_thy, filename2)
+
+        filename2 = 'rescaled_theory_chi.dat'
+        save_result(x_thy, y_thy, filename2)
+
+        filename2 = 'rescaled_exp_chi.dat'
         save_result(x_exp, y_exp, filename2)
 
-        if g_r:
+        if parameters.g_r:
             self.area_diff = calc_area(y_exp, y_thy)
         else:
-            self.area_diff = calc_area(y_exp, y_thy, k_thy)
-
-    def gr_function(self, parameters):
+            self.area_diff = calc_area(y_exp, y_thy, x_thy)
+    """
+    def gr_function(self):
+        parameters = self.parameters
         xafsft_para = ['xafsft',
                        '--kmin', parameters.kmin,
                        '--kmax', parameters.kmax,
@@ -237,4 +259,6 @@ class Expectra(Calculator):
                        'chi.dat']
         join_symbol = ' '
         xafsft_cmd = join_symbol.join(xafsft_para)
+        print(xafst_cmd)
         os.system(xafsft_cmd)
+     """
