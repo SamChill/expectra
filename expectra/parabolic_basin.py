@@ -27,7 +27,7 @@ class BasinHopping(Dynamics):
                  optimizer=FIRE,
                  fmax=0.1,
                  dr=0.1,
-                 cutoff=3.50,
+                 cutoff=3.20,
                  ratio=0.0,
                  temperature=100 * kB,
                  logfile='-',
@@ -65,8 +65,10 @@ class BasinHopping(Dynamics):
         self.exafs_calculator = exafs_calculator
         self.chi_logfile = chi_logfile
         self.parabola_log = parabola_log
-        self.k = None
-        self.chi = None
+
+        #variables used to store g_r function(x: distance) or k_chi data(x: k, y: chi)
+        self.x_thy = None
+        self.y_thy = None
 
         if self.basin:
            print "Basin Hopping switched on"
@@ -91,7 +93,6 @@ class BasinHopping(Dynamics):
     def initialize(self):
         #self.energy = 1.e32
         self.Umin = 1.e32
-        #self.chi_deviation = 100.00
         self.rmin = self.atoms.get_positions()
         self.positions = self.atoms.get_positions()
         self.call_observers()
@@ -102,9 +103,11 @@ class BasinHopping(Dynamics):
                 
     def run(self, steps):
         """Hop the basins for defined number of steps."""
+
         ro = self.positions
         dot_o = self.get_ES_dot(ro)
-        
+        print(type(dot_o))
+        print(dot_o)
         ratio = self.ratio
         alpha = dot_o[0]*ratio/dot_o[1]
         Uo = dot_o[0] + alpha * dot_o[1]
@@ -124,8 +127,14 @@ class BasinHopping(Dynamics):
               Un = None
               while Un is None:
                   rn = self.move(ro)
+                  print "structure check:"
+                  print(self.single_atom(rn))
                   if np.sometrue(rn != ro) and not self.single_atom(rn):
                       dot_n = self.get_ES_dot(rn)
+
+                      if dot_n is None:
+                         print "One bad structure is found"
+                         continue
 
                       if self.basin:
                          alpha = ratio * np.absolute(dot_n[0]-dot_o[0]) / np.absolute(dot_n[1] - dot_o[1])
@@ -280,10 +289,10 @@ class BasinHopping(Dynamics):
 
     def log_chi(self, step):
         self.chi_log.write("step: %d\n" % (step))
-        k = self.k
-        chi = self.chi
-        for i in xrange(len(k)):
-            self.chi_log.write("%6.3f %16.8e\n" % (k[i], chi[i]))
+        x = self.x_thy
+        y = self.y_thy
+        for i in xrange(len(x)):
+            self.chi_log.write("%6.3f %16.8e\n" % (x[i], y[i]))
         self.chi_log.flush()
 
     def move(self, ro):
@@ -350,9 +359,11 @@ class BasinHopping(Dynamics):
         self.atoms.set_positions(positions)
 
         En = self.get_energy()
-        chi_devi_n = self.get_chi_deviation()
+        if self.single_atom(self.atoms.get_positions()):
+           return None
+        area_diff_n = self.get_area_diff()
 
-        config = [En, chi_devi_n]
+        config = [En, area_diff_n]
 
         return config
         
@@ -375,16 +386,16 @@ class BasinHopping(Dynamics):
 
         return energy
 
-    def get_chi_deviation(self):
-        """Return the standard deviation of chi between calculated and
-        experimental."""
+    def get_area_diff(self):
+        """Return the area circulated by calculated and
+        experimental curve."""
         try:
             self.atoms.set_calculator(self.exafs_calculator)
-            chi_deviation, self.k, self.chi = self.atoms.get_potential_energy()
+            area_diff, self.x_thy, self.y_thy = self.atoms.get_potential_energy()
         except:
             # Something went wrong.
             # In GPAW the atoms are probably to near to each other.
             return None
    
-        return chi_deviation
+        return area_diff
 
