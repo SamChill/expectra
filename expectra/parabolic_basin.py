@@ -28,7 +28,8 @@ class BasinHopping(Dynamics):
                  fmax=0.1,
                  dr=0.1,
                  cutoff=3.20,
-                 ratio=0.0,
+                 alpha = 0.5,
+                 beta= 1.0,
                  temperature=100 * kB,
                  logfile='-',
                  chi_logfile='chi_log.dat',
@@ -60,7 +61,8 @@ class BasinHopping(Dynamics):
         self.fmax = fmax
         self.dr = dr
         self.cutoff = cutoff
-        self.ratio = ratio
+        self.alpha = alpha
+        self.beta = beta
         self.opt_calculator = opt_calculator
         self.exafs_calculator = exafs_calculator
         self.chi_logfile = chi_logfile
@@ -108,9 +110,8 @@ class BasinHopping(Dynamics):
         dot_o = self.get_ES_dot(ro)
         print(type(dot_o))
         print(dot_o)
-        ratio = self.ratio
-        alpha = dot_o[0]*ratio/dot_o[1]
-        Uo = dot_o[0] + alpha * dot_o[1]
+        beta = self.beta
+        Uo = (1-self.alpha) * dot_o[0] + self.alpha * beta * dot_o[1]
 
         parabola = []
         parabola.append(dot_o)
@@ -137,8 +138,8 @@ class BasinHopping(Dynamics):
                          continue
 
                       if self.basin:
-                         alpha = ratio * np.absolute(dot_n[0]-dot_o[0]) / np.absolute(dot_n[1] - dot_o[1])
-                         Un = dot_n[0] + alpha * dot_n[1]
+                         alpha = self.get_alpha(parabola, dot_n)
+                         Un = (1 - alpha) * dot_n[0] + alpha * beta * dot_n[1]
                          accept = np.exp((Uo - Un) / self.kT) > np.random.uniform()
                       else:
                          accept = False
@@ -269,7 +270,7 @@ class BasinHopping(Dynamics):
                continue
 #        self.logParabola(step, parabola)
         return parabola
-
+    
     def logParabola(self, step, parabola=[]):
         if self.log_parabola is None:
             return
@@ -336,6 +337,33 @@ class BasinHopping(Dynamics):
            print "no corresponding dot is found in parabola"
            return None
         return index
+
+    def get_alpha(self, parabola, dot):
+        """
+        If a new dot cannot help push the parabola close to the origin, 
+        find out which line on the parabola it is closest to.
+        Then calculate alpha based on the slope of the line perpendicular to
+        the closest line
+        """
+        temp_dot = copy.deepcopy(parabola)
+
+        #Extend the parabola along two ending direction. The extended dots used
+        #to construct two lines for the starting and the ending dots, respectively.
+        temp_dot.insert(0, np.sum([parabola[0], [0, 1]], axis=0))
+        temp_dot.append(np.sum([parabola[len(parabola)-1], [1, 0]], axis=0))
+        #find out the line cloest to the dot
+        index = 0
+        for i in range (len(temp_dot)-1):
+            cross_norm = np.absolute(self.get_cross(temp_dot[i+1], dot, temp_dot[i]))
+            line_norm = np.linalg.norm(np.asarray(temp_dot[i]) - np.asarray(temp_dot[i+1]))
+            distance = cross_norm / line_norm
+            min_dist = distance
+            if distance < min_dist:
+               min_dist = distance
+               index = i
+        slope = (temp_dot[index][1] - temp_dot[index+1][1]) / (temp_dot[index][0] - temp_dot[index+1][0])
+        alpha = 1 / (1 + self.beta/slope)
+        return alpha
 
     def get_cross(self, config_1, config_2, config_3):
         #calculate the cross vector
