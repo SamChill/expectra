@@ -29,7 +29,7 @@ class BasinHopping(Dynamics):
                  dr=0.1,
                  cutoff=3.20,
                  alpha = 0.5,
-                 beta= 1.0,
+                 beta = 1.0,
                  temperature=100 * kB,
                  logfile='-',
                  chi_logfile='chi_log.dat',
@@ -111,8 +111,7 @@ class BasinHopping(Dynamics):
         print(type(dot_o))
         print(dot_o)
         beta = self.beta
-        Uo = (1-self.alpha) * dot_o[0] + self.alpha * beta * dot_o[1]
-
+        alpha = self.alpha
         parabola = []
         parabola.append(dot_o)
 
@@ -125,59 +124,45 @@ class BasinHopping(Dynamics):
 
         #Basin Hopping methods
         for step in range(steps):
-              Un = None
-              while Un is None:
+              dot_n = None
+              while dot_n is None:
                   rn = self.move(ro)
-                  print "structure check:"
-                  print(self.single_atom(rn))
                   if np.sometrue(rn != ro) and not self.single_atom(rn):
+                      print('%s = %d: %s' % ("Step", step, "Optimize the new structure and find area_diff"))
                       dot_n = self.get_ES_dot(rn)
 
                       if dot_n is None:
-                         print "One bad structure is found"
+                         print "One bad structure with single atom is found"
                          continue
 
-                      if self.basin:
-                         alpha = self.get_alpha(parabola, dot_n)
-                         Un = (1 - alpha) * dot_n[0] + alpha * beta * dot_n[1]
-                         accept = np.exp((Uo - Un) / self.kT) > np.random.uniform()
-                      else:
-                         accept = False
-                         Un = dot_n[0]
-
-              if Un < self.Umin:
-                  # new minimum found
-                  self.Umin = Un
-                  self.rmin = self.atoms.get_positions()
-
-
-              #accept or reject?
               self.debug.write('%s %d\n' % ("step", step))
-              print(str(self.parabolic))
               old_p = copy.deepcopy(parabola)
+              accept = False
               if self.parabolic:
                  self.parabolic_push(step, parabola, dot_n)
                  print "old parabola:"
                  print(old_p)
                  print "new parabola:"
                  print(parabola)
-                 test = cmp(old_p, parabola)
-                 print(test)
                  if cmp(old_p, parabola) != 0:
                     self.logParabola(step, parabola)
+                    ro = rn.copy()
+                    dot_o = dot_n
                     para_accept = True
                  else:
                     para_accept = False
-                 
-              if accept or para_accept:
-                  ro = rn.copy()
-                  Uo = Un
-
-              self.log(step, accept, para_accept, alpha, dot_n[0], dot_n[1], Un, self.Umin)
+                    if self.basin:
+                       alpha = self.get_alpha(parabola, dot_n)
+                       print('%s: %15.6f' % ("alpha", alpha))
+                       Uo = (1 - alpha) * dot_o[0] + alpha * beta * dot_o[1]
+                       Un = (1 - alpha) * dot_n[0] + alpha * beta * dot_n[1]
+                       accept = np.exp((Uo - Un) / self.kT) > np.random.uniform()
+                       if accept:
+                          ro = rn.copy()
+                          dot_o = dot_n
+                   
+              self.log(step, accept, para_accept, alpha, dot_n[0], dot_n[1])
               
-#              self.log(step, accept, conf_n[1], conf_n[2])
-#              self.log_chi(step)
-
     def parabolic_push(self, step, parabola, dot_n): 
         """
         Parabolic method to determine if accept rn or not
@@ -280,12 +265,12 @@ class BasinHopping(Dynamics):
         self.log_parabola.flush()
         
 
-    def log(self, step, accept, para_accept, alpha, En, Sn, Un, Umin):
+    def log(self, step, accept, para_accept, alpha, En, Sn):
         if self.logfile is None:
             return
         name = self.__class__.__name__
-        self.logfile.write('%s: %d  %d %d %15.6f  %15.6f  %15.8f  %15.6f  %15.6f\n'
-                           % (name, step, accept, para_accept, alpha, En, Sn, Un, Umin))
+        self.logfile.write('%s: %d  %d %d %15.6f  %15.6f  %15.8f\n'
+                           % (name, step, accept, para_accept, alpha, En, Sn))
         self.logfile.flush()
 
     def log_chi(self, step):
@@ -312,6 +297,9 @@ class BasinHopping(Dynamics):
         return atoms.get_positions()
 
     def single_atom(self, rn):
+        """
+        Check if there is single atom in the structure
+        """
         atoms = self.atoms
         atoms.set_positions(rn)
         for i in range (len(atoms)):
@@ -352,17 +340,28 @@ class BasinHopping(Dynamics):
         temp_dot.insert(0, np.sum([parabola[0], [0, 1]], axis=0))
         temp_dot.append(np.sum([parabola[len(parabola)-1], [1, 0]], axis=0))
         #find out the line cloest to the dot
-        index = 0
         for i in range (len(temp_dot)-1):
             cross_norm = np.absolute(self.get_cross(temp_dot[i+1], dot, temp_dot[i]))
             line_norm = np.linalg.norm(np.asarray(temp_dot[i]) - np.asarray(temp_dot[i+1]))
             distance = cross_norm / line_norm
-            min_dist = distance
+            if i == 0:
+               min_dist = distance
+               index = 0
+            print('%s %15.6f' % ("min_dist", min_dist))
             if distance < min_dist:
                min_dist = distance
                index = i
-        slope = (temp_dot[index][1] - temp_dot[index+1][1]) / (temp_dot[index][0] - temp_dot[index+1][0])
-        alpha = 1 / (1 + self.beta/slope)
+               print('%s %d' % ("new index", i))
+        if index == 0:
+           print "left end"
+           alpha = 0.0
+        elif index == len(temp_dot)-1:
+           print "right end"
+           alpha = 1.0
+        else:
+           slope = (temp_dot[index][1] - temp_dot[index+1][1]) / (temp_dot[index][0] - temp_dot[index+1][0])
+           print('%s: %15.6f' % ("slope", slope))
+           alpha = 1.0 / (1.0 - self.beta * slope)
         return alpha
 
     def get_cross(self, config_1, config_2, config_3):
