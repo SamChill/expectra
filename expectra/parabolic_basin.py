@@ -118,9 +118,9 @@ class BasinHopping(Dynamics):
         #log data
         self.log_parabola = open(self.parabola_log, 'w')
         self.debug = open('debug.dat', 'w')
-#        self.chi_log = open(self.chi_logfile, 'w')
-#        self.log_chi(-1)
-#        self.log(-1, 1, conf_o[1], conf_o[2])
+        self.chi_log = open(self.chi_logfile, 'w')
+        self.log_chi(-1)
+        self.log(-1, 1, 1, alpha, dot_o[0], dot_o[1])
 
         #Basin Hopping methods
         for step in range(steps):
@@ -147,20 +147,20 @@ class BasinHopping(Dynamics):
                  if cmp(old_p, parabola) != 0:
                     self.logParabola(step, parabola)
                     ro = rn.copy()
-                    dot_o = dot_n
                     para_accept = True
                  else:
                     para_accept = False
                     if self.basin:
                        alpha = self.get_alpha(parabola, dot_n)
                        print('%s: %15.6f' % ("alpha", alpha))
-                       Uo = (1 - alpha) * dot_o[0] + alpha * beta * dot_o[1]
+                       if step == 0:
+                          Uo = (1 - alpha) * dot_o[0] + alpha * beta * dot_o[1]
                        Un = (1 - alpha) * dot_n[0] + alpha * beta * dot_n[1]
                        accept = np.exp((Uo - Un) / self.kT) > np.random.uniform()
                        if accept:
                           ro = rn.copy()
-                          dot_o = dot_n
-                   
+                          Uo = Un
+              self.log_chi(step) 
               self.log(step, accept, para_accept, alpha, dot_n[0], dot_n[1])
               
     def parabolic_push(self, step, parabola, dot_n): 
@@ -357,7 +357,7 @@ class BasinHopping(Dynamics):
            alpha = 0.0
         elif index == len(temp_dot)-1:
            print "right end"
-           alpha = 1.0
+           alpha = 1.0/self.beta
         else:
            slope = (temp_dot[index][1] - temp_dot[index+1][1]) / (temp_dot[index][0] - temp_dot[index+1][0])
            print('%s: %15.6f' % ("slope", slope))
@@ -388,6 +388,9 @@ class BasinHopping(Dynamics):
         En = self.get_energy()
         if self.single_atom(self.atoms.get_positions()):
            return None
+        else:
+           if self.lm_trajectory is not None:
+              self.lm_trajectory.write(self.atoms)
         area_diff_n = self.get_area_diff()
 
         config = [En, area_diff_n]
@@ -402,8 +405,6 @@ class BasinHopping(Dynamics):
             opt = self.optimizer(self.atoms, 
                                  logfile=self.optimizer_logfile)
             opt.run(fmax=self.fmax)
-            if self.lm_trajectory is not None:
-                self.lm_trajectory.write(self.atoms)
 
             energy = self.atoms.get_potential_energy()
         except:
