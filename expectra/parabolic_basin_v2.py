@@ -1,3 +1,4 @@
+#This version uses a fixed alpha instead of changing alpha every run as in parabolic_basin.py
 import sys
 import numpy as np
 import copy
@@ -153,9 +154,8 @@ class BasinHopping(Dynamics):
                  else:
                     para_accept = False
                     if self.basin:
-                       alpha = self.get_alpha(parabola, dot_n)
                        print('%s: %15.6f' % ("alpha", alpha))
-                       if step == 0:
+                       if Uo is None:
                           Uo = (1 - alpha) * dot_o[0] + alpha * beta * dot_o[1]
                        Un = (1 - alpha) * dot_n[0] + alpha * beta * dot_n[1]
                        accept = np.exp((Uo - Un) / self.kT) > np.random.uniform()
