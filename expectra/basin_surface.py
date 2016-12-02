@@ -6,6 +6,8 @@ from ase.units import kB
 from ase.parallel import world
 from ase.io.trajectory import PickleTrajectory
 from ase.io.trajectory import Trajectory
+from ase.md.velocitydistribution import MaxwellBoltzmannDistribution
+from ase.md.verlet import VelocityVerlet
 import tsase
 import sys
 
@@ -124,7 +126,6 @@ class BasinHopping(Dynamics):
         Uo = (1.0 - alpha ) * Eo + alpha * chi_o
 
         self.exafs_log = open(self.exafs_logfile, 'w')
-        self.log_exafs(-1)
         self.log(-1,'Yes', alpha, Eo, chi_o, Uo, self.Umin)
 
         acceptnum = 0
@@ -187,8 +188,8 @@ class BasinHopping(Dynamics):
                            % (name, step, accept, alpha, En, chi_devi_n, Un, Umin))
         self.logfile.flush()
 
-    def log_exafs(self, step):
-        self.exafs_log.write("step: %d\n" % (step))
+    def log_exafs(self, step, absorber):
+        self.exafs_log.write("step: %d absorber: %s\n" % (step, absorber))
         k = self.k
         chi = self.chi
         for i in xrange(len(k)):
@@ -208,6 +209,7 @@ class BasinHopping(Dynamics):
         rn = atoms.get_positions()
         world.broadcast(rn, 0)
         atoms.set_positions(rn)
+
     def move(self, ro):
         """Move atoms by a random step."""
         atoms = self.atoms
@@ -269,6 +271,17 @@ class BasinHopping(Dynamics):
         atoms.set_positions(self.rmin)
         print 'get_minimum',self.Emin
         return self.Emin, atoms
+  
+    def run_md(self, positions):
+        # Describe the interatomic interactions with the Effective Medium Theory
+        atoms.set_calculator(self.opt_calculator)
+
+        # Set the momenta corresponding to T=300K
+        MaxwellBoltzmannDistribution(atoms, 300 * units.kB)
+
+        # We want to run MD with constant energy using the VelocityVerlet algorithm.
+        dyn = VelocityVerlet(atoms, 5 * units.fs)  # 5 fs time step.
+        dyn.run(200)
 
     def get_energy(self, positions):
         """Return the energy of the nearest local minimum."""
@@ -279,6 +292,7 @@ class BasinHopping(Dynamics):
                self.cst_nonOPT.write(self.atoms)
  
             try:
+                self.atoms.set_calculator(self.opt_calculator)
                 if self.optimizer.__name__ == "FIRE":
                    opt = self.optimizer(self.atoms,
                                             logfile=self.optimizer_logfile)
@@ -291,6 +305,7 @@ class BasinHopping(Dynamics):
                 #                     maxstep=self.mss)
                 opt.run(fmax=self.fmax)
                 self.energy = self.atoms.get_potential_energy()
+                
                 if self.all_local is not None:
                     self.all_local.write(self.atoms)
                 self.local_min_pos = self.atoms.get_positions()
@@ -301,15 +316,18 @@ class BasinHopping(Dynamics):
         
         return self.energy
 
-    def get_chi_deviation(self, positions):
+    def get_chi_deviation(self, positions, step):
         """Return the standard deviation of chi between calculated and
         experimental."""
         self.positions = positions
         self.atoms.set_positions(positions)
 
-        try:
-            self.atoms.set_calculator(self.exafs_calculator)
-            self.chi_deviation, self.k, self.chi = self.atoms.get_potential_energy()
+        try: 
+            for calc in self.exafs_calculator:
+                self.atoms.set_calculator(self.calc)
+                chi_deviation, self.k, self.chi = self.atoms.get_potential_energy()
+                self.log_exafs(step, self.calc.get_absorber)
+                self.chi_deviation = chi_deviation + self.chi_deviation
         except:
             # Something went wrong.
             # In GPAW the atoms are probably to near to each other.
