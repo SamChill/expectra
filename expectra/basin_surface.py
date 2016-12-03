@@ -2,7 +2,7 @@ import numpy as np
 
 from ase.optimize.optimize import Dynamics
 from tsase.optimize.sdlbfgs import SDLBFGS
-from ase.units import kB
+from ase.units import kB, fs
 from ase.parallel import world
 from ase.io.trajectory import PickleTrajectory
 from ase.io.trajectory import Trajectory
@@ -25,6 +25,9 @@ class BasinHopping(Dynamics):
                  opt_calculator = None,
                  exafs_calculator = None,
                  temperature=100 * kB,
+                 md_temperature = 300 * kB,
+                 md_step_size = 1 * fs,
+                 md_step = 1000,
                  optimizer=SDLBFGS,
                  alpha = 0,
                  fmax=0.1,
@@ -34,6 +37,7 @@ class BasinHopping(Dynamics):
                  absorbate = None,
                  pareto_step = None,
                  node_numb = None,
+                 md_trajectory = 'md',
                  logfile='basin_log', 
                  trajectory='lowest.traj',
                  optimizer_logfile='-',
@@ -56,6 +60,9 @@ class BasinHopping(Dynamics):
         self.opt_calculator = opt_calculator
         self.exafs_calculator = exafs_calculator
         self.kT = temperature
+        self.md_temperature = md_temperature
+        self.md_step_size = md_step_size
+        self.md_step = md_step
         self.optimizer = optimizer
         self.fmax = fmax
         self.dr = dr
@@ -65,6 +72,7 @@ class BasinHopping(Dynamics):
         self.absorbate = absorbate
         self.pareto_step = str(pareto_step)
         self.node_numb = str(node_numb)
+        self.md_trajectory = md_trajectory
         self.exafs_logfile = exafs_logfile + "_" + self.pareto_step + "_" + self.node_numb
         self.logfile = logfile + "_" + self.pareto_step + "_" + self.node_numb
 
@@ -104,14 +112,14 @@ class BasinHopping(Dynamics):
         self.chi = None
         self.chi_deviation = 100.00
         self.positions = 0.0 * self.atoms.get_positions()
-        self.Umin = self.get_energy(self.atoms.get_positions()) or 1.e32 
+        self.Umin = 1.e32 
         self.rmin = self.atoms.get_positions()
         self.positions = self.atoms.get_positions()
         self.call_observers()
 #        self.log(-1, self.Emin, self.Emin,self.dr)
                 
         #'logfile' is defined in the superclass Dynamics in 'optimize.py'
-        self.logfile.write('%12s: %s %s %21s %21s %21s %21s %21s\n'
+        self.logfile.write('#%12s: %s %s %21s %21s %21s %21s %21s\n'
                             % ("name", "step", "accept", "alpha", "energy",
                                "chi_deviation", "pseudoPot", "Umin"))
 
@@ -121,7 +129,7 @@ class BasinHopping(Dynamics):
         alpha = self.alpha
 
         ro = self.positions
-        Eo = self.get_energy(ro)
+        Eo = self.get_energy(ro, -1)
         chi_o = self.get_chi_deviation(self.atoms.get_positions())
         Uo = (1.0 - alpha ) * Eo + alpha * chi_o
 
@@ -136,7 +144,7 @@ class BasinHopping(Dynamics):
             self.steps += 1
             while Un is None:
                 rn = self.move(ro)
-                En = self.get_energy(rn)
+                En = self.get_energy(rn, step)
                 chi_n = self.get_chi_deviation(self.atoms.get_positions())
                 Un = En + alpha * chi_n
             if Un < self.Umin:
@@ -199,20 +207,6 @@ class BasinHopping(Dynamics):
     def move(self, ro):
         """Move atoms by a random step."""
         atoms = self.atoms
-        # displace coordinates
-        disp = np.random.uniform(-1., 1., (len(atoms), 3))
-        rn = ro + self.dr * disp
-        atoms.set_positions(rn)
-        if self.cm is not None:
-            cm = atoms.get_center_of_mass()
-            atoms.translate(self.cm - cm)
-        rn = atoms.get_positions()
-        world.broadcast(rn, 0)
-        atoms.set_positions(rn)
-
-    def move(self, ro):
-        """Move atoms by a random step."""
-        atoms = self.atoms
         if self.distribution == 'uniform':
             disp = np.random.uniform(-self.dr, self.dr, (len(atoms), 3))
         elif self.distribution == 'gaussian':
@@ -234,14 +228,11 @@ class BasinHopping(Dynamics):
         else:
             disp = np.random.uniform(-1*self.dr, self.dr, (len(atoms), 3))
         #donot move substrate
-        print(disp)
         if self.substrate is not None:
            for i in range(len(atoms)):
                for j in range(len(self.substrate)):
                    if i==self.substrate[j]:
                       disp[i] = (0.0,0.0,0.0)
-        print "new disp"
-        print(disp)
 
         if self.significant_structure == True:
             rn = self.local_min_pos + disp
@@ -272,18 +263,16 @@ class BasinHopping(Dynamics):
         print 'get_minimum',self.Emin
         return self.Emin, atoms
   
-    def run_md(self, positions):
-        # Describe the interatomic interactions with the Effective Medium Theory
-        atoms.set_calculator(self.opt_calculator)
-
-        # Set the momenta corresponding to T=300K
-        MaxwellBoltzmannDistribution(atoms, 300 * units.kB)
-
+    def run_md(self, step):
+        self.md_trajectory = self.md_trajectory+"_"+self.pareto_step + "_" + self.node_numb+"_"+str(step)
+        # Set the momenta corresponding to md_temperature
+        MaxwellBoltzmannDistribution(self.atoms, self.md_temperature * kB)
         # We want to run MD with constant energy using the VelocityVerlet algorithm.
-        dyn = VelocityVerlet(atoms, 5 * units.fs)  # 5 fs time step.
-        dyn.run(200)
+        dyn = VelocityVerlet(self.atoms, self.md_step_size * units.fs, 
+                             trajectory=self.md_trajectory)  # 5 fs time step.
+        dyn.run(self.md_step)
 
-    def get_energy(self, positions):
+    def get_energy(self, positions, step):
         """Return the energy of the nearest local minimum."""
         if np.sometrue(self.positions != positions):
             self.positions = positions
@@ -305,6 +294,9 @@ class BasinHopping(Dynamics):
                 #                     maxstep=self.mss)
                 opt.run(fmax=self.fmax)
                 self.energy = self.atoms.get_potential_energy()
+
+                if self.md:
+                   self.run_md(step)
                 
                 if self.all_local is not None:
                     self.all_local.write(self.atoms)
@@ -325,7 +317,10 @@ class BasinHopping(Dynamics):
         try: 
             for calc in self.exafs_calculator:
                 self.atoms.set_calculator(self.calc)
-                chi_deviation, self.k, self.chi = self.atoms.get_potential_energy()
+                if self.md:
+                   chi_deviation, self.k, self.chi = self.atoms.get_potential_energy(filename=self.md_trajectory)
+                else:
+                   chi_deviation, self.k, self.chi = self.atoms.get_potential_energy()
                 self.log_exafs(step, self.calc.get_absorber)
                 self.chi_deviation = chi_deviation + self.chi_deviation
         except:
