@@ -10,39 +10,47 @@ from ase.parallel import world
 from ase.io.trajectory import Trajectory
 
 class ParetoLineOptimize(Dynamics):
-    """Basin hopping algorithm.
-
-    After Wales and Doye, J. Phys. Chem. A, vol 101 (1997) 5111-5116
-
-    and 
-
-    David J. Wales and Harold A. Scheraga, Science, Vol. 285, 1368 (1999)
-    """
 
     def __init__(self, atoms,
                  opt_calculator = None,
                  exafs_calculator = None,
-                 basin = True,
-                 parabolic = True,
-                 optimizer=FIRE,
-                 fmax=0.1,
-                 dr=0.1,
-                 cutoff=3.20,
-                 ratio=0.0,
+                 ncore = 5,
+                 bh_steps = 100,
+                 #MD parameters
+                 md_temperature = 300 * kB,
+                 md_step_size = 1 * fs,
+                 md_step = 1000,
+                 md_trajectory = 'md',
+                 #Basin Hopping parameters
+                 optimizer = FIRE,
                  temperature=100 * kB,
-                 logfile='-',
-                 chi_logfile='chi_log.dat',
-                 parabola_log = 'parabola.dat',
+                 fmax = 0.1,
+                 dr = 0.1,
+                 z_min = 14.0,
+                 substrate = None,
+                 absorbate = None,
+                 logfile='basin_log', 
                  trajectory='lowest.traj',
                  optimizer_logfile='-',
                  local_minima_trajectory='local_minima.traj',
-                 adjust_cm=True):
+                 exafs_logfile = 'exafs',
+                 adjust_cm=True,
+                 mss=0.2,
+                 minenergy=None,
+                 distribution='uniform',
+                 adjust_step_size=None,
+                 adjust_every = None,
+                 target_ratio = 0.5,
+                 adjust_fraction = 0.05,
+                 significant_structure = False,  # displace from minimum at each move
+                 significant_structure2 = False, # displace from global minimum found so far at each move
+                 pushapart = 0.4,
+                 jumpmax=None
+                 ):
         """Parameters:
 
         atoms: Atoms object
             The Atoms object to operate on.
-        basin: switch on basin hopping when True
-        parabolic: switch on parabolic_push method when True
 
         trajectory: string
             Pickle file used to store trajectory of atomic movement.
@@ -50,43 +58,43 @@ class ParetoLineOptimize(Dynamics):
         logfile: file object or str
             If *logfile* is a string, a file with that name will be opened.
             Use '-' for stdout.
-        pseudo_pot: pseudo potential defined
         """
         Dynamics.__init__(self, atoms, logfile, trajectory)
-        self.kT = temperature
-        self.basin = basin
-        self.parabolic = parabolic
-        self.optimizer = optimizer
-        self.fmax = fmax
-        self.dr = dr
-        self.cutoff = cutoff
-        self.ratio = ratio
         self.opt_calculator = opt_calculator
         self.exafs_calculator = exafs_calculator
-        self.chi_logfile = chi_logfile
-        self.parabola_log = parabola_log
+        self.ncore = ncore
+        self.bh_steps = bh_steps
 
-        #variables used to store g_r function(x: distance) or k_chi data(x: k, y: chi)
-        self.x_thy = None
-        self.y_thy = None
+        self.md_temperature = md_temperature
+        self.md_step_size = md_step_size
+        self.md_step = md_step
+        self.md_trajectory = md_trajectory
 
-        if self.basin:
-           print "Basin Hopping switched on"
-        if self.parabolic:
-           print "Parabolic pushing switched on"
-        if not self.basin and not self.parabolic:
-           print "basin and parabolic, at least one must be true"
-
-        if adjust_cm:
-            self.cm = atoms.get_center_of_mass()
-        else:
-            self.cm = None
+        self.optimizer = optimizer
+        self.kT = temperature
+        self.fmax = fmax
+        self.dr = dr
+        self.z_min = z_min
+        self.alpha = alpha
+        self.substrate = substrate
+        self.absorbate = absorbate
+        self.exafs_logfile = exafs_logfile 
+        self.logfile = logfile 
 
         self.optimizer_logfile = optimizer_logfile
         self.lm_trajectory = local_minima_trajectory
-        if isinstance(local_minima_trajectory, str):
-            self.lm_trajectory = Trajectory(local_minima_trajectory,
-                                                  'w', atoms)
+
+        self.minenergy = minenergy
+        self.distribution = distribution
+        self.adjust_step = adjust_step_size
+        self.adjust_every = adjust_every
+        self.target_ratio = target_ratio
+        self.adjust_fraction = adjust_fraction
+        self.significant_structure = significant_structure
+        self.significant_structure2 = significant_structure2
+        self.pushapart = pushapart
+        self.jumpmax = jumpmax
+        self.mss = mss
 
         self.initialize()
 
@@ -94,11 +102,8 @@ class ParetoLineOptimize(Dynamics):
         #self.energy = 1.e32
         self.Umin = 1.e32
         self.rmin = self.atoms.get_positions()
-        self.positions = self.atoms.get_positions()
-        self.call_observers()
         self.debug = None
 
-        #'logfile' is defined in the superclass Dynamics in 'optimize.py'
 #        self.logfile.write('   name      step accept     energy         chi_difference\n')
                 
     def run(self, steps):
@@ -108,37 +113,90 @@ class ParetoLineOptimize(Dynamics):
         interval = 1 / ncore
         target_ratio = interval
         alpha_list = []
-        pareto_base = None
-        for i in range (ncore + 1):
+        pareto_base = []
+        for i in range (ncore):
             alpha_list.append(i * interval)
             prob[i] = interval
+        alpha_list.append(1.0)
 
         total_prob = 0.0
         accepted_numb = 0.0
         for step in range(steps)
             for i in range (ncore):
+                #select alpha
                 if step == 0:
                    index = i
                 else:
                    index = self.find_alpha(prob)
                 alpha[i] = np.random(alpha_list[index], alpha_list[index+1])
-                opt = BasinHopping(nsteps, alpha=alpha[i])
-                opt.run(fmax)
-                dots = read_dots()
+
+                #run BasinHopping
+                opt = BasinHopping(atoms,
+                                   alpha = alpha[i],
+                                   pareto_step = step,
+                                   node_numb = i,
+                                   opt_calculator = self.opt_calculator,
+                                   exafs_calculator = self.exafs_calculator,
+                                   #MD parameters
+                                   md_temperature = self.md_temperature,
+                                   md_step_size = self.md_step_size,
+                                   md_step = self.md_step,
+                                   md_trajectory = self.md_trajectory,
+                                   #Basin Hopping parameters
+                                   optimizer = self.optimizer,
+                                   temperature = self.temperature,
+                                   fmax = self.fmax,
+                                   dr = self.dr,
+                                   z_min = self.z_min,
+                                   substrate = self.substrate,
+                                   absorbate = self.absorbate,
+                                   logfile = self.logfile, 
+                                   trajectory = self.trajectory,
+                                   optimizer_logfile = self.optimizer_logfile,
+                                   local_minima_trajectory = self.local_minima_trajectory,
+                                   exafs_logfile = self.exafs_logfile,
+                                   adjust_cm = self.adjust_cm,
+                                   mss = self.mss,
+                                   minenergy = self.minenergy,
+                                   distribution = self.distribution,
+                                   adjust_step_size = self.adjust_step_size,
+                                   adjust_every = self.adjust_every,
+                                   target_ratio = self.target_ratio,
+                                   adjust_fraction = self.adjust_fraction,
+                                   significant_structure = self.significant_structure,  
+                                   significant_structure2 = self.significant_structure2, 
+                                   pushapart = self.pushapart,
+                                   jumpmax = self.jumpmax,
+                                   ):
+                opt.run(self.bh_steps)
+
+                #read the dots and geometries obtained from basin hopping
+                dots = read_dots(self.logfile)
+                lm_trajectory = self.lm_trajectory+'_'+str(step)+'_'+str(i)
+                traj = Trajectory(lm_trajectory)
+
+                #initialize pareto line
+                if step == 0 and i == 0:
+                   pareto_base.append(dots[0])
+                   pareto_line = copy.deepcopy(pareto_base)
+                   pareto_atoms.append(traj[0])
+
+                #pick out the dots which can push pareto line
                 for dot in dots:
                     promoter = self.dots_filter(pareto_base, dot)
                     if promoter:
-                       pareto_line = self.pareto_push(step, pareto_base, dot)
-                       accepted_numb += 1
+                       pareto_line = self.pareto_push(step, pareto_line, dot)
+                       accepted_numb += 1 
                 prob[i] = prob[i] + accept_numb / len(dots)
                 total_prob = total_prob + prob[i]
-         
+            
+            pareto_base = copy.deepcopy(pareto_line)
             #normalize the total probablility to 1
             for i in range (ncore):
                 prob[i] = prob[i] / total_prob 
                 temp = temp + prob[i]
                 biased_prob[i] = temp
-            prob = biased_prob
+            prob = copy.deepcopy(biased_prob)
 """
         for step in range(steps):
 
@@ -196,28 +254,32 @@ class ParetoLineOptimize(Dynamics):
                continue
         return promoter
 
-    def pareto_push(self, step, parabola, dot_n): 
+    def pareto_push(self, step, pareto_line, pareto_atoms, dot_n, atom_n): 
         """
         Parabolic method to determine if accept rn or not
         """
-        #only one dot in parabola
-        temp = copy.deepcopy(parabola)
+        #only one dot in pareto_line
+        temp = copy.deepcopy(pareto_line)
         if len(temp)==1:
            if dot_n[0] < temp[0][0] and dot_n[1] > temp[0][1]:
-              parabola[0] = dot_n
-              parabola.append(temp[0])
+              pareto_line[0] = dot_n
+              pareto_line.append(temp[0])
+              pareto_atoms[0] = atom_n
+              pareto_atoms.append(atom_n)
            elif dot_n[0] > temp[0][0] and dot_n[1] < temp[0][1]:
-              parabola.append(dot_n)
+              pareto_line.append(dot_n)
+              pareto_atoms.append(atom_n)
            elif dot_n[0] < temp[0][0] and dot_n[1] < temp[0][1]:
-              parabola[0] = dot_n
+              pareto_line[0] = dot_n
+              pareto_atoms[0] = atom_n
            
-           return parabola
+           return pareto_line
         
-        #more than one dot in parabola
+        #more than one dot in pareto_line
         replace = False
         for i in range(0, len(temp)):
-            #parabola may be changed after every cycle. Need to find new index for element temp[i]
-            index = self.find_index(parabola, temp[i])
+            #pareto_line may be changed after every cycle. Need to find new index for element temp[i]
+            index = self.find_index(pareto_line, temp[i])
 
             #corner situation
             if i == 0:
@@ -231,7 +293,8 @@ class ParetoLineOptimize(Dynamics):
                   dot_f2 = temp[i+2]
 
                if dot_n[0] < dot_b1[0]:
-                  parabola[index] = dot_n
+                  pareto_line[index] = dot_n
+                  pareto_atoms[index] = atom_n
                   replace = True
 
             elif i == len(temp)-2 and i != 0:
@@ -246,9 +309,11 @@ class ParetoLineOptimize(Dynamics):
                #end point
                if dot_n[1] < temp[i][1]:
                   if replace:
-                     parabola.pop(index)
+                     pareto_line.pop(index)
+                     pareto_atoms.pop(index)
                   else:
-                     parabola[index] = dot_n
+                     pareto_line[index] = dot_n
+                     pareto_atoms[index] = atom_n
                continue
             else:
                dot_b1 = temp[i-1]
@@ -270,32 +335,35 @@ class ParetoLineOptimize(Dynamics):
                   #A previous dot has already been replaced. Discard the current one
                   #'poped' is to record the number of dots poped before current one 
                   #which will change the location of current dot
-                  parabola.pop(index)
+                  pareto_line.pop(index)
+                  pareto_atoms.pop(index)
                   self.debug.write('%d  %s  %d\n' % (i, 'poped',  index))
                else:
-                  parabola[index] = dot_n
+                  pareto_line[index] = dot_n
+                  pareto_atoms[index] = atom_n
                   self.debug.write('%d  %s  %d\n' % (i, 'replaced',  index))
                   replace = True
                continue
             elif cross_b1 < 0  and cross_f1 > 0 and cross_f2 <0:
                #If 'insert' happens, no further action to other dots is needed
-               parabola.insert(index+1, dot_n)
+               pareto_line.insert(index+1, dot_n)
+               pareto_atoms.insert(index+1, atom_n)
                self.debug.write('%d  %s  %d\n' % (i, 'inserted',  index+1))
-               return parabola
+               return pareto_line
             else:
                #For other situations, no acition is needed
                self.debug.write('%d  %s  %d\n' % (i, 'nothing done',  index))
                continue
-#        self.logParabola(step, parabola)
-        return parabola
+#        self.logParetoLine(step, pareto_line)
+        return pareto_line
     
-    def logParabola(self, step, parabola=[]):
-        if self.log_parabola is None:
+    def logParetoLine(self, step, pareto_line=[]):
+        if self.log_paretoLine is None:
             return
-        self.log_parabola.write('%s = %d  %s = %d\n' % ("step", step, "dot_number", len(parabola)))
-        for i in range(0, len(parabola)):
-             self.log_parabola.write('%15.6f  %15.6f\n' % (parabola[i][0], parabola[i][1]))
-        self.log_parabola.flush()
+        self.log_paretoLine.write('%s = %d  %s = %d\n' % ("step", step, "dot_number", len(pareto_line)))
+        for i in range(0, len(pareto_line)):
+             self.log_paretoLine.write('%15.6f  %15.6f\n' % (pareto_line[i][0], pareto_line[i][1]))
+        self.log_paretoLine.flush()
         
 
     def log(self, step, accept, para_accept, alpha, En, Sn, Un, Umin):
@@ -313,21 +381,6 @@ class ParetoLineOptimize(Dynamics):
         for i in xrange(len(x)):
             self.chi_log.write("%6.3f %16.8e\n" % (x[i], y[i]))
         self.chi_log.flush()
-
-    def move(self, ro):
-        """Move atoms by a random step."""
-        atoms = self.atoms
-        # displace coordinates
-        disp = np.random.uniform(-1., 1., (len(atoms), 3))
-        rn = ro + self.dr * disp
-        atoms.set_positions(rn)
-        if self.cm is not None:
-            cm = atoms.get_center_of_mass()
-            atoms.translate(self.cm - cm)
-        rn = atoms.get_positions()
-        world.broadcast(rn, 0)
-        atoms.set_positions(rn)
-        return atoms.get_positions()
 
     def single_atom(self, rn):
         atoms = self.atoms
