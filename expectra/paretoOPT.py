@@ -104,34 +104,42 @@ class ParetoLineOptimize(Dynamics):
     def run(self, steps):
         """Hop the basins for defined number of steps."""
 
-        #initialize alpha for each basin hopping jobs
+        #initialize alpha and probablility for each basin hopping jobs
         interval = 1 / ncore
         target_ratio = interval
         alpha_list = []
+        pareto_base = None
         for i in range (ncore + 1):
             alpha_list.append(i * interval)
             prob[i] = interval
 
         total_prob = 0.0
-        for i in range (ncore):
-            alpha[i] = np.random(alpha_list[i], alpha_list[i+1])
-            opt = BasinHopping(nsteps, alpha=alpha[i])
-            opt.run(fmax)
-
-            pareto_base
-            for dot in dots:
-                pareto_line = self.pareto_push(step, pareto_base, dot)
-                accept_numb += 1
-            prob[i] = prob[i] + accept_numb / len(dots)
-            total_prob = total_prob + prob[i]
-
-        #normalize the total probablility to 1
-        for i in range (ncore):
-            prob[i] = prob[i] / total_prob 
-            temp = temp + prob[i]
-            biased_prob[i] = temp
-
-
+        accepted_numb = 0.0
+        for step in range(steps)
+            for i in range (ncore):
+                if step == 0:
+                   index = i
+                else:
+                   index = self.find_alpha(prob)
+                alpha[i] = np.random(alpha_list[index], alpha_list[index+1])
+                opt = BasinHopping(nsteps, alpha=alpha[i])
+                opt.run(fmax)
+                dots = read_dots()
+                for dot in dots:
+                    promoter = self.dots_filter(pareto_base, dot)
+                    if promoter:
+                       pareto_line = self.pareto_push(step, pareto_base, dot)
+                       accepted_numb += 1
+                prob[i] = prob[i] + accept_numb / len(dots)
+                total_prob = total_prob + prob[i]
+         
+            #normalize the total probablility to 1
+            for i in range (ncore):
+                prob[i] = prob[i] / total_prob 
+                temp = temp + prob[i]
+                biased_prob[i] = temp
+            prob = biased_prob
+"""
         for step in range(steps):
 
             #run BasinHopping
@@ -168,10 +176,25 @@ class ParetoLineOptimize(Dynamics):
                       alpha[i] = np.random(avg_alpha, alpha_list[i+1])
                    else:
                       alpha[i] = np.random(alpha_list[i], avg_alpha)
-
-         if alteration = "kmc_like":
+"""
             
+    def dots_filter(self, pareto_line, dot):
+        #To determine if the dot can push the pareto line.
+        temp = copy.deepcopy(pareto_line)
 
+        #Extend the parabola along two ending direction. The extended dots used
+        #to construct two lines for the starting and the ending dots, respectively.
+        temp.insert(0, np.sum([pareto_line[0], [0, 1]], axis=0))
+        temp.append(np.sum([pareto_line[len(pareto_line)-1], [1, 0]], axis=0))
+        
+        for i in range(len(temp)-1):
+            if self.get_cross(temp[i], temp[i+1], dot) > 0:
+               promoter = True
+               return promoter
+            else:
+               promoter = False
+               continue
+        return promoter
 
     def pareto_push(self, step, parabola, dot_n): 
         """
@@ -319,6 +342,12 @@ class ParetoLineOptimize(Dynamics):
                return True
         return False
 
+    def find_alpha(self, probability):
+        test_prob = np.random(0,1)
+        for i in range(len(probability)):
+            if probability[i] < test_prob and probaility[i+1] >test_prob:
+               return i
+
     def find_index(self, parabola, temp):
         numb = 0
         for i in range (len(parabola)):
@@ -415,7 +444,7 @@ class ParetoLineOptimize(Dynamics):
             S_scaled = dot[1]/S_factor
             dot = ([E_scaled, S_scaled])
 
-     return parabola, dots, scale_ratio
+        return parabola, dots, scale_ratio
 
     def get_cross(self, config_1, config_2, config_3):
         #calculate the cross vector
