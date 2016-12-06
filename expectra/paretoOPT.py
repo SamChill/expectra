@@ -34,6 +34,8 @@ class ParetoLineOptimize(Dynamics):
                  optimizer_logfile='-',
                  local_minima_trajectory='local_minima.traj',
                  exafs_logfile = 'exafs',
+                 log_paretoLine = 'paretoLine.dat'
+                 log_paretoAtoms = 'paretoAtoms.traj' 
                  adjust_cm=True,
                  mss=0.2,
                  minenergy=None,
@@ -83,7 +85,12 @@ class ParetoLineOptimize(Dynamics):
 
         self.optimizer_logfile = optimizer_logfile
         self.lm_trajectory = local_minima_trajectory
+        self.log_paretoLine = log_paretoLine
+        self.log_paretoAtoms = log_paretoAtoms
 
+        if isinstance(log_paretoAtoms, str):
+            self.log_paretoAtoms = Trajectory(self.log_paretoAtoms,
+                                                  'w', atoms)
         self.minenergy = minenergy
         self.distribution = distribution
         self.adjust_step = adjust_step_size
@@ -185,7 +192,7 @@ class ParetoLineOptimize(Dynamics):
                 for dot in dots:
                     promoter = self.dots_filter(pareto_base, dot)
                     if promoter:
-                       pareto_line = self.pareto_push(step, pareto_line, dot)
+                       pareto_line = self.pareto_push(step, pareto_line, pareto_atoms, dot)
                        accepted_numb += 1 
                 prob[i] = prob[i] + accept_numb / len(dots)
                 total_prob = total_prob + prob[i]
@@ -197,6 +204,9 @@ class ParetoLineOptimize(Dynamics):
                 temp = temp + prob[i]
                 biased_prob[i] = temp
             prob = copy.deepcopy(biased_prob)
+
+        for atoms in pareto_atoms:
+            self.log_paretoAtoms.write(atoms)
 """
         for step in range(steps):
 
@@ -354,7 +364,7 @@ class ParetoLineOptimize(Dynamics):
                #For other situations, no acition is needed
                self.debug.write('%d  %s  %d\n' % (i, 'nothing done',  index))
                continue
-#        self.logParetoLine(step, pareto_line)
+        self.logParetoLine(step, pareto_line)
         return pareto_line
     
     def logParetoLine(self, step, pareto_line=[]):
