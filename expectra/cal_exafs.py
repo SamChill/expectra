@@ -97,6 +97,7 @@ class Expectra(Calculator):
         every = 1,
         exp_file = 'chi_exp.dat',
         #Following parameters used for xafsft to calculate g_r plot
+        real_space = True,
         kweight= 2,
         dk = 1.0,
         rmin = 0.0,
@@ -110,7 +111,6 @@ class Expectra(Calculator):
     """
 
     def __int__(self, label='EXAFS',
-                g_r = False,
                 atoms = None, 
                 kmin = 2.50, 
                 kmax = 10.00, 
@@ -125,6 +125,7 @@ class Expectra(Calculator):
             experimental and calculated EXAFS spectra
         """
         self.lable = label
+        self.real_space = real_space
         self.atoms = atoms
         self.kmin = kmin
         self.kmax = kmax
@@ -134,6 +135,7 @@ class Expectra(Calculator):
         self.results = None
         self.x = None
         self.y = None
+        self.traj_filename = None
       
         Calculator.__init__(self, restart, ignore_bad_restart_file,
                             label, atoms,
@@ -147,7 +149,8 @@ class Expectra(Calculator):
         if changed_parameters:
            self.reset()
 
-    def get_potential_energy(self, atoms=None, properties=None):
+    def get_chi_differ(self, atoms=None, properties=None, filename=None):
+        self.traj_filename = filename
         if properties is None:
             self.calculate(atoms, 'chi_area')
             return self.area_diff, self.x, self.y
@@ -155,13 +158,17 @@ class Expectra(Calculator):
             self.calculate(atoms, 'chi_deviation')
             return self.chi_deviation, self.x, self.y
 
+    def get_absorber(self):
+        return self.parameters.absorber
+
     def calculate(self, atoms=None, properties=None):
 
         parameters = self.parameters
         
-        #write 'CONTCAR' which is required for 'expectra' code
-        con_filename = 'CONTCAR'
-        write_vasp(filename = con_filename, atoms = atoms, direct=True, vasp5=True)
+        #write geoemtry file 'con' if trajectory file doesn't exist
+        if self.traj_filename is None:
+           self.traj_filename = 'con'
+           write_vasp(filename = self.traj_filename, atoms = atoms, direct=True, vasp5=True)
 
         #prepare the command to run 'expectra'
         if parameters.ignore_elements is not None:
@@ -179,15 +186,15 @@ class Expectra(Calculator):
                          ignore,
                          '--skip', str(parameters.skip),
                          '--every', str(parameters.every),
-                         con_filename]
+                         self.traj_filename]
         join_symbol = ' '
         expectra_cmd = join_symbol.join(expectra_para)
 
         #run 'expectra'
         os.system(expectra_cmd)
 
-        if parameters.g_r:
-           print "g_r enabled"
+        if parameters.real_space:
+           print "optimize exafs in real space"
            xafsft_para = ['xafsft',
                           '--kmin', str(parameters.kmin),
                           '--kmax', str(parameters.kmax),
@@ -197,7 +204,6 @@ class Expectra(Calculator):
                           '--rmax', str(parameters.rmax),
                           '--ft-part', parameters.ft_part,
                           'chi.dat']
-           print(xafsft_para)
            join_symbol = ' '
            xafsft_cmd = join_symbol.join(xafsft_para)
            print(xafsft_cmd)
@@ -241,24 +247,7 @@ class Expectra(Calculator):
         filename2 = 'rescaled_exp_chi.dat'
         save_result(x_exp, y_exp, filename2)
 
-        if parameters.g_r:
+        if parameters.real_space:
             self.area_diff = calc_area(y_exp, y_thy)
         else:
             self.area_diff = calc_area(y_exp, y_thy, x_thy)
-    """
-    def gr_function(self):
-        parameters = self.parameters
-        xafsft_para = ['xafsft',
-                       '--kmin', parameters.kmin,
-                       '--kmax', parameters.kmax,
-                       '--kweight', parameters.kweight,
-                       '--dk', parameters.dk,
-                       '--rmin', parameters.rmin,
-                       '--rmax', parameters.rmax,
-                       '--ft-part',parameter.ft_part,
-                       'chi.dat']
-        join_symbol = ' '
-        xafsft_cmd = join_symbol.join(xafsft_para)
-        print(xafst_cmd)
-        os.system(xafsft_cmd)
-     """

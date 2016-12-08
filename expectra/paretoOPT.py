@@ -5,9 +5,10 @@ import copy
 from ase.optimize.optimize import Dynamics
 from ase.optimize.fire import FIRE
 #from ase.optimize.LBFGS import LBFGS
-from ase.units import kB
+from ase.units import kB, fs
 from ase.parallel import world
 from ase.io.trajectory import Trajectory
+from expectra.basin_surface import BasinHopping
 
 class ParetoLineOptimize(Dynamics):
 
@@ -15,8 +16,9 @@ class ParetoLineOptimize(Dynamics):
                  opt_calculator = None,
                  exafs_calculator = None,
                  ncore = 5,
-                 bh_steps = 100,
+                 bh_steps = 10,
                  #MD parameters
+                 md = True,
                  md_temperature = 300 * kB,
                  md_step_size = 1 * fs,
                  md_step = 1000,
@@ -30,12 +32,12 @@ class ParetoLineOptimize(Dynamics):
                  substrate = None,
                  absorbate = None,
                  logfile='basin_log', 
-                 trajectory='lowest.traj',
+                 trajectory='lowest',
                  optimizer_logfile='-',
                  local_minima_trajectory='local_minima.traj',
                  exafs_logfile = 'exafs',
-                 log_paretoLine = 'paretoLine.dat'
-                 log_paretoAtoms = 'paretoAtoms.traj' 
+                 log_paretoLine = 'paretoLine.dat',
+                 log_paretoAtoms = 'paretoAtoms.traj', 
                  adjust_cm=True,
                  mss=0.2,
                  minenergy=None,
@@ -61,30 +63,32 @@ class ParetoLineOptimize(Dynamics):
             If *logfile* is a string, a file with that name will be opened.
             Use '-' for stdout.
         """
-        Dynamics.__init__(self, atoms, logfile, trajectory)
+#       Dynamics.__init__(self, atoms, logfile, trajectory)
+        self.atoms = atoms
         self.opt_calculator = opt_calculator
         self.exafs_calculator = exafs_calculator
         self.ncore = ncore
         self.bh_steps = bh_steps
-
+ 
+        self.md = md
         self.md_temperature = md_temperature
         self.md_step_size = md_step_size
         self.md_step = md_step
         self.md_trajectory = md_trajectory
 
         self.optimizer = optimizer
-        self.kT = temperature
+        self.temperature = temperature
         self.fmax = fmax
         self.dr = dr
         self.z_min = z_min
-        self.alpha = alpha
         self.substrate = substrate
         self.absorbate = absorbate
         self.exafs_logfile = exafs_logfile 
         self.logfile = logfile 
 
+        self.trajectory = trajectory
         self.optimizer_logfile = optimizer_logfile
-        self.lm_trajectory = local_minima_trajectory
+        self.local_minima_trajectory = local_minima_trajectory
         self.log_paretoLine = log_paretoLine
         self.log_paretoAtoms = log_paretoAtoms
 
@@ -93,8 +97,9 @@ class ParetoLineOptimize(Dynamics):
                                                   'w', atoms)
         self.minenergy = minenergy
         self.distribution = distribution
-        self.adjust_step = adjust_step_size
+        self.adjust_step_size = adjust_step_size
         self.adjust_every = adjust_every
+        self.adjust_cm = adjust_cm
         self.target_ratio = target_ratio
         self.adjust_fraction = adjust_fraction
         self.significant_structure = significant_structure
@@ -117,38 +122,50 @@ class ParetoLineOptimize(Dynamics):
         """Hop the basins for defined number of steps."""
 
         #initialize alpha and probablility for each basin hopping jobs
-        interval = 1 / ncore
+        ncore = self.ncore
+        interval = 1 / float(ncore)
         target_ratio = interval
         alpha_list = []
+        alpha = []
+        prob = []
         pareto_base = []
         for i in range (ncore):
             alpha_list.append(i * interval)
-            prob[i] = interval
+            prob.append(interval)
         alpha_list.append(1.0)
 
         total_prob = 0.0
         accepted_numb = 0.0
-        for step in range(steps)
+        for step in range(steps):
+            images = []
             for i in range (ncore):
                 #select alpha
                 if step == 0:
                    index = i
+                   atoms = self.atoms
                 else:
                    index = self.find_alpha(prob)
-                alpha[i] = np.random(alpha_list[index], alpha_list[index+1])
-
+                   atoms = images[i]
+                alpha.append(np.random.uniform(alpha_list[index], alpha_list[index+1]))
+                print "alpha:", alpha[i]
                 #run BasinHopping
+                pareto_step = str(step)
+                node_numb = str(i)
+                trajectory = self.trajectory+'_'+ pareto_step + "_" + node_numb + ".traj"
+                md_trajectory = self.md_trajectory+"_"+pareto_step + "_" + node_numb
+                exafs_logfile = self.exafs_logfile + "_" + pareto_step + "_" + node_numb
+                logfile = self.logfile + "_" + pareto_step + "_" + node_numb
+                lm_traject = self.local_minima_trajectory + "_" + pareto_step + "_" + node_numb
                 opt = BasinHopping(atoms,
                                    alpha = alpha[i],
-                                   pareto_step = step,
-                                   node_numb = i,
                                    opt_calculator = self.opt_calculator,
                                    exafs_calculator = self.exafs_calculator,
                                    #MD parameters
+                                   md = True,
                                    md_temperature = self.md_temperature,
                                    md_step_size = self.md_step_size,
                                    md_step = self.md_step,
-                                   md_trajectory = self.md_trajectory,
+                                   md_trajectory = md_trajectory,
                                    #Basin Hopping parameters
                                    optimizer = self.optimizer,
                                    temperature = self.temperature,
@@ -157,11 +174,11 @@ class ParetoLineOptimize(Dynamics):
                                    z_min = self.z_min,
                                    substrate = self.substrate,
                                    absorbate = self.absorbate,
-                                   logfile = self.logfile, 
-                                   trajectory = self.trajectory,
+                                   logfile = logfile, 
+                                   trajectory = trajectory,
                                    optimizer_logfile = self.optimizer_logfile,
-                                   local_minima_trajectory = self.local_minima_trajectory,
-                                   exafs_logfile = self.exafs_logfile,
+                                   local_minima_trajectory = lm_traject,
+                                   exafs_logfile = exafs_logfile,
                                    adjust_cm = self.adjust_cm,
                                    mss = self.mss,
                                    minenergy = self.minenergy,
@@ -174,12 +191,15 @@ class ParetoLineOptimize(Dynamics):
                                    significant_structure2 = self.significant_structure2, 
                                    pushapart = self.pushapart,
                                    jumpmax = self.jumpmax,
-                                   ):
+                                   )
                 opt.run(self.bh_steps)
 
                 #read the dots and geometries obtained from basin hopping
                 dots = read_dots(self.logfile)
                 lm_trajectory = self.lm_trajectory+'_'+str(step)+'_'+str(i)
+                trajectory = self.trajectory+'_'+str(step)+'_'+str(i)+'.traj'
+                lowest_traj = Trajectory(trajectory)
+                images.append(lowest_traj[-1])
                 traj = Trajectory(lm_trajectory)
 
                 #initialize pareto line
@@ -207,7 +227,8 @@ class ParetoLineOptimize(Dynamics):
 
         for atoms in pareto_atoms:
             self.log_paretoAtoms.write(atoms)
-"""
+     
+    """
         for step in range(steps):
 
             #run BasinHopping
@@ -244,7 +265,7 @@ class ParetoLineOptimize(Dynamics):
                       alpha[i] = np.random(avg_alpha, alpha_list[i+1])
                    else:
                       alpha[i] = np.random(alpha_list[i], avg_alpha)
-"""
+    """
             
     def dots_filter(self, pareto_line, dot):
         #To determine if the dot can push the pareto line.
@@ -406,7 +427,7 @@ class ParetoLineOptimize(Dynamics):
         return False
 
     def find_alpha(self, probability):
-        test_prob = np.random(0,1)
+        test_prob = np.random.uniform(0,1)
         for i in range(len(probability)):
             if probability[i] < test_prob and probaility[i+1] >test_prob:
                return i
@@ -491,13 +512,13 @@ class ParetoLineOptimize(Dynamics):
 
         return sorted_dots, alpha_mid
 
-    def scale_dots(self, parabola, dots)
+    def scale_dots(self, parabola, dots):
         
         S_factor = parabola[0][1] - parabola[len(parabola)-1][1]
         E_factor = parabola[len(parabola)-1][0] - parabola[0][0]
         scale_ratio = S_factor / E_factor
         
-        for i in range(len(parabola)) 
+        for i in range(len(parabola)): 
             E_scaled = parabola[i][0]/E_factor
             S_scaled = parabola[i][1]/S_factor
             parabola[i] = ([E_scaled, S_scaled])

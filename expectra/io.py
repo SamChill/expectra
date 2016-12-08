@@ -199,3 +199,15 @@ def read_chi(filename):
     chis = numpy.array(chis)
     return ks, chis
 
+def read_dots(filename):
+    f = open(filename)
+    dots = []
+    for line in f:
+        if line.startswith('#'):
+           continue
+        fields = [ float(field) for field in line.split()]
+        dot = [fields[4], fields[5]]
+        dots.append(dot)
+    f.close()
+    return dots
+
