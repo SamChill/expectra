@@ -33,6 +33,10 @@ class BasinHopping(Dynamics):
                  node_numb = None,
                  opt_calculator = None,
                  exafs_calculator = None,
+                 #Switch or modify elements in structures
+                 switch = False,
+                 switch_space = 1, #How many atoms will be switched or modified
+                 elements_lib = None, #elements used to replace the atoms
                  #MD parameters
                  md = True,
                  md_temperature = 300 * kB,
@@ -72,6 +76,8 @@ class BasinHopping(Dynamics):
         self.opt_calculator = opt_calculator
         self.exafs_calculator = exafs_calculator
    
+        self.switch = switch
+        self.switch_space = switch_space
         self.md = md
         self.md_temperature = md_temperature
         self.md_step_size = md_step_size
@@ -159,6 +165,7 @@ class BasinHopping(Dynamics):
         Eo = self.get_energy(ro, -1)
         chi_o = self.get_chi_deviation(ro, -1)
         print 'Energy: ', Eo, 'chi_differ: ', chi_o
+        print '====================================================================='
         Uo = (1.0 - alpha ) * Eo + alpha * chi_o
         self.log(-1,'Yes', alpha, Eo, chi_o, Uo, self.Umin)
 
@@ -169,9 +176,14 @@ class BasinHopping(Dynamics):
             Un = None
             self.steps += 1
             while Un is None:
-                rn = self.move(ro)
+                if self.switch:
+                   self.switch_elements(ro)
+                if self.move:
+                   rn = self.move(ro)
                 En = self.get_energy(rn, step)
                 chi_n = self.get_chi_deviation(self.atoms.get_positions(), step)
+                print 'Energy: ', En, 'chi_differ: ', chi_n
+                print '====================================================================='
                 Un = En + alpha * chi_n
             if Un < self.Umin:
                 self.Umin = Un
@@ -192,8 +204,6 @@ class BasinHopping(Dynamics):
                 else:
                     ro = rn.copy()
                 Uo = Un
-                if self.lm_trajectory is not None:
-                    self.lm_trajectory.write(self.atoms)
                # if self.lm_trajectory is not None:
                #     tsase.io.write_con(self.lm_trajectory,self.atoms,w='a')
             else:
@@ -280,6 +290,20 @@ class BasinHopping(Dynamics):
         atoms.set_positions(rn)
         return atoms.get_positions()
 
+    def switch_elements(self, ro):
+        atoms = self.atoms
+        elements_lib = self.elements_lib
+        switch_space = self.switch_space
+        chemical_symbols = atoms.get_chemical_symbols()
+        index=random.sample(xrange(len(atoms)), switch_space)
+        switched = False
+        while not switched:
+              for i in range (switch_space):
+                  chimical_symbols[index[i]] = random.choice(elements_lib)
+              if chemical_symbols != atoms.get_chemical_symbols():
+                 switched = True
+        self.atoms.set_chemical_symbols(chemical_symbols)
+
     def get_minimum(self):
         """Return minimal energy and configuration."""
         atoms = self.atoms.copy()
@@ -303,6 +327,13 @@ class BasinHopping(Dynamics):
                                         maxstep=self.mss)
             opt.run(fmax=self.fmax)
             self.energy = self.atoms.get_potential_energy()
+
+            if self.lm_trajectory is not None:
+                self.lm_trajectory.write(self.atoms)
+
+            print 'Total energy: ', self.energy
+            print '--------------------------------------------'
+
             if self.md:
                md_trajectory = self.md_trajectory+"_"+str(step)+".traj"
                run_md(atoms=self.atoms, 
@@ -310,6 +341,8 @@ class BasinHopping(Dynamics):
                       temperature = self.md_temperature,
                       step_size = self.md_step_size,
                       trajectory = md_trajectory)
+
+            print '--------------------------------------------'
             
             if self.all_local is not None:
                self.all_local.write(self.atoms)
@@ -317,7 +350,7 @@ class BasinHopping(Dynamics):
         except:
                 # Something went wrong.
                 # In GPAW the atoms are probably to near to each other.
-            return "optimizer or md error"
+            return "Optimizer or MD error"
         
         return self.energy
 
@@ -327,7 +360,7 @@ class BasinHopping(Dynamics):
         self.positions = positions
         self.atoms.set_positions(positions)
         md_trajectory = self.md_trajectory+"_"+str(step)+".traj"
-        print 'calculate exafs with md trajectory:'
+        print 'Calculate exafs with md trajectory:'
         try: 
             if isinstance(self.exafs_calculator, list):
                for calc in self.exafs_calculator:
@@ -346,7 +379,6 @@ class BasinHopping(Dynamics):
                   print 'calculate exafs with optimized structure'
                   chi_deviation, self.k, self.chi = self.exafs_calculator.get_chi_differ(atoms = self.atoms)
                self.log_exafs(step, self.exafs_calculator.get_absorber())
-               print chi_deviation
                self.chi_deviation = chi_deviation 
                
         except:
@@ -373,8 +405,6 @@ class BasinHopping(Dynamics):
                         movea[i] += alpha *vec
                         movea[j] -= alpha *vec
             positions += movea
-            print "moved atoms:"
-            print(moved)
             if moved == 0:
                 break
         self.atoms
