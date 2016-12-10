@@ -189,12 +189,14 @@ class Expectra(Calculator):
                          self.traj_filename]
         join_symbol = ' '
         expectra_cmd = join_symbol.join(expectra_para)
+        print 'Expectra parameters:'
+        print '   ', expectra_cmd
 
         #run 'expectra'
         os.system(expectra_cmd)
 
         if parameters.real_space:
-           print "optimize exafs in real space"
+           print "Compare exafs in real space"
            xafsft_para = ['xafsft',
                           '--kmin', str(parameters.kmin),
                           '--kmax', str(parameters.kmax),
@@ -206,13 +208,14 @@ class Expectra(Calculator):
                           'chi.dat']
            join_symbol = ' '
            xafsft_cmd = join_symbol.join(xafsft_para)
-           print(xafsft_cmd)
+           print 'Fourier transformation parameters used:'
+           print '   ', xafsft_cmd
            os.system(xafsft_cmd)
            inputfile = 'exafs.chir'
            xmin = parameters.rmin
            xmax = parameters.rmax
         else:
-           print "chi.dat"
+           print "Compare exafs in k-space"
            inputfile = 'chi.dat'
            xmin = parameters.kmin
            xmax = parameters.kmax

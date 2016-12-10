@@ -8,6 +8,7 @@ from ase.parallel import world
 from ase.io.trajectory import PickleTrajectory
 from ase.io.trajectory import Trajectory
 from expectra.md import run_md
+import random
 import sys
 import os
 
@@ -34,6 +35,7 @@ class BasinHopping(Dynamics):
                  opt_calculator = None,
                  exafs_calculator = None,
                  #Switch or modify elements in structures
+                 move_atoms = True,
                  switch = False,
                  switch_space = 1, #How many atoms will be switched or modified
                  elements_lib = None, #elements used to replace the atoms
@@ -75,7 +77,8 @@ class BasinHopping(Dynamics):
         self.trajectory = trajectory
         self.opt_calculator = opt_calculator
         self.exafs_calculator = exafs_calculator
-   
+
+        self.move_atoms = move_atoms   
         self.switch = switch
         self.switch_space = switch_space
         self.md = md
@@ -143,6 +146,7 @@ class BasinHopping(Dynamics):
         self.k = None
         self.chi = None
         self.chi_deviation = 100.00
+        self.chi_differ = []
         self.positions = 0.0 * self.atoms.get_positions()
         self.Umin = 1.e32 
         self.energy = 1.e32
@@ -167,7 +171,7 @@ class BasinHopping(Dynamics):
         print 'Energy: ', Eo, 'chi_differ: ', chi_o
         print '====================================================================='
         Uo = (1.0 - alpha ) * Eo + alpha * chi_o
-        self.log(-1,'Yes', alpha, Eo, chi_o, Uo, self.Umin)
+        self.log(-1,'Yes', alpha, Eo, self.chi_differ, Uo, self.Umin)
 
         acceptnum = 0
         recentaccept = 0
@@ -175,10 +179,12 @@ class BasinHopping(Dynamics):
         for step in range(steps):
             Un = None
             self.steps += 1
+            self.chi_differ = []
             while Un is None:
                 if self.switch:
                    self.switch_elements(ro)
-                if self.move:
+                   rn = ro
+                if self.move_atoms:
                    rn = self.move(ro)
                 En = self.get_energy(rn, step)
                 chi_n = self.get_chi_deviation(self.atoms.get_positions(), step)
@@ -220,14 +226,15 @@ class BasinHopping(Dynamics):
                        self.dr = self.dr * (1+self.adjust_fraction)
                     elif ratio < self.target_ratio:
                         self.dr = self.dr * (1-self.adjust_fraction)
-            self.log(step, accept, alpha, En, chi_n, Un, self.Umin)
+            self.log(step, accept, alpha, En, self.chi_differ, Un, self.Umin)
 
-    def log(self, step, accept, alpha, En, chi_devi_n, Un, Umin):
+    def log(self, step, accept, alpha, En, chi_differ, Un, Umin):
         if self.logfile is None:
             return
         name = self.__class__.__name__
-        self.logfile.write('%s: %d  %s  %15.6f  %15.6f  %15.8f  %15.6f  %15.6f\n'
-                           % (name, step, accept, alpha, En, chi_devi_n, Un, Umin))
+        temp_chi = '  '.join(chi_differ)
+        self.logfile.write('%s: %d  %s  %15.6f  %15.6f    %s   %15.6f  %15.6f\n'
+                           % (name, step, accept, alpha, En, temp_chi, Un, Umin))
         self.logfile.flush()
 
     def log_exafs(self, step, absorber):
@@ -296,12 +303,9 @@ class BasinHopping(Dynamics):
         switch_space = self.switch_space
         chemical_symbols = atoms.get_chemical_symbols()
         index=random.sample(xrange(len(atoms)), switch_space)
-        switched = False
-        while not switched:
+        while (chemical_symbols == atoms.get_chemical_symbols()):
               for i in range (switch_space):
                   chimical_symbols[index[i]] = random.choice(elements_lib)
-              if chemical_symbols != atoms.get_chemical_symbols():
-                 switched = True
         self.atoms.set_chemical_symbols(chemical_symbols)
 
     def get_minimum(self):
@@ -366,10 +370,13 @@ class BasinHopping(Dynamics):
                for calc in self.exafs_calculator:
                    self.atoms.set_calculator(self.calc)
                    if self.md:
+                      print 'MD trajectories are used'
                       chi_deviation, self.k, self.chi = self.calc.get_chi_differ(filename=md_trajectory)
                    else:
+                      print 'calculate exafs with optimized structure'
                       chi_deviation, self.k, self.chi = self.calc.get_chi_differ(atoms=self.atoms)
                    self.log_exafs(step, calc.get_absorber())
+                   self.chi_differ.append(chi_deviation)
                    self.chi_deviation = chi_deviation + self.chi_deviation
             else:
                if self.md:
@@ -379,6 +386,7 @@ class BasinHopping(Dynamics):
                   print 'calculate exafs with optimized structure'
                   chi_deviation, self.k, self.chi = self.exafs_calculator.get_chi_differ(atoms = self.atoms)
                self.log_exafs(step, self.exafs_calculator.get_absorber())
+               self.chi_differ.append(chi_deviation)
                self.chi_deviation = chi_deviation 
                
         except:

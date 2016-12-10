@@ -9,7 +9,7 @@ from ase.units import kB, fs
 from ase.parallel import world
 from ase.io.trajectory import Trajectory
 from expectra.basin_surface import BasinHopping
-
+from expectra.io import read_dots
 class ParetoLineOptimize(Dynamics):
 
     def __init__(self, atoms,
@@ -92,6 +92,9 @@ class ParetoLineOptimize(Dynamics):
         self.log_paretoLine = log_paretoLine
         self.log_paretoAtoms = log_paretoAtoms
 
+        if isinstance(log_paretoLine, str):
+            self.log_paretoLine = open(self.log_paretoLine, 'w')
+
         if isinstance(log_paretoAtoms, str):
             self.log_paretoAtoms = Trajectory(self.log_paretoAtoms,
                                                   'w', atoms)
@@ -114,7 +117,7 @@ class ParetoLineOptimize(Dynamics):
         #self.energy = 1.e32
         self.Umin = 1.e32
         self.rmin = self.atoms.get_positions()
-        self.debug = None
+        self.debug = open('debug', 'w')
 
 #        self.logfile.write('   name      step accept     energy         chi_difference\n')
                 
@@ -123,22 +126,26 @@ class ParetoLineOptimize(Dynamics):
 
         #initialize alpha and probablility for each basin hopping jobs
         ncore = self.ncore
-        interval = 1 / float(ncore)
+        interval = 1.0 / float(ncore)
         target_ratio = interval
         alpha_list = []
-        alpha = []
         prob = []
         pareto_base = []
+        pareto_line = []
+        pareto_atoms = []
+        images = []
         for i in range (ncore):
-            alpha_list.append(i * interval)
+            alpha_list.append(float(i) * interval)
             prob.append(interval)
+            images.append(None)
         alpha_list.append(1.0)
 
-        total_prob = 0.0
-        accepted_numb = 0.0
         for step in range(steps):
-            images = []
+            total_prob = 0.0
+            alpha = []
+            print "====================================================================="
             for i in range (ncore):
+                print "====================================================================="
                 #select alpha
                 if step == 0:
                    index = i
@@ -147,7 +154,8 @@ class ParetoLineOptimize(Dynamics):
                    index = self.find_alpha(prob)
                    atoms = images[i]
                 alpha.append(np.random.uniform(alpha_list[index], alpha_list[index+1]))
-                print "alpha:", alpha[i]
+                print "alpha:", alpha[i], "i = ", i
+
                 #run BasinHopping
                 pareto_step = str(step)
                 node_numb = str(i)
@@ -155,7 +163,7 @@ class ParetoLineOptimize(Dynamics):
                 md_trajectory = self.md_trajectory+"_"+pareto_step + "_" + node_numb
                 exafs_logfile = self.exafs_logfile + "_" + pareto_step + "_" + node_numb
                 logfile = self.logfile + "_" + pareto_step + "_" + node_numb
-                lm_traject = self.local_minima_trajectory + "_" + pareto_step + "_" + node_numb
+                lm_trajectory = self.local_minima_trajectory + "_" + pareto_step + "_" + node_numb
                 opt = BasinHopping(atoms,
                                    alpha = alpha[i],
                                    opt_calculator = self.opt_calculator,
@@ -177,7 +185,7 @@ class ParetoLineOptimize(Dynamics):
                                    logfile = logfile, 
                                    trajectory = trajectory,
                                    optimizer_logfile = self.optimizer_logfile,
-                                   local_minima_trajectory = lm_traject,
+                                   local_minima_trajectory = lm_trajectory,
                                    exafs_logfile = exafs_logfile,
                                    adjust_cm = self.adjust_cm,
                                    mss = self.mss,
@@ -195,11 +203,9 @@ class ParetoLineOptimize(Dynamics):
                 opt.run(self.bh_steps)
 
                 #read the dots and geometries obtained from basin hopping
-                dots = read_dots(self.logfile)
-                lm_trajectory = self.lm_trajectory+'_'+str(step)+'_'+str(i)
-                trajectory = self.trajectory+'_'+str(step)+'_'+str(i)+'.traj'
+                dots = read_dots(logfile)
                 lowest_traj = Trajectory(trajectory)
-                images.append(lowest_traj[-1])
+                images[i] = lowest_traj[-1]
                 traj = Trajectory(lm_trajectory)
 
                 #initialize pareto line
@@ -209,21 +215,24 @@ class ParetoLineOptimize(Dynamics):
                    pareto_atoms.append(traj[0])
 
                 #pick out the dots which can push pareto line
-                for dot in dots:
-                    promoter = self.dots_filter(pareto_base, dot)
+                accepted_numb = 0
+                for j in xrange (len(dots)):
+                    promoter = self.dots_filter(pareto_base, dots[j])
                     if promoter:
-                       pareto_line = self.pareto_push(step, pareto_line, pareto_atoms, dot)
+                       pareto_line = self.pareto_push(step, i, pareto_line, pareto_atoms, dots[j], traj[j])
                        accepted_numb += 1 
-                prob[i] = prob[i] + accept_numb / len(dots)
+                prob[i] = prob[i] + accepted_numb / len(dots)
                 total_prob = total_prob + prob[i]
             
             pareto_base = copy.deepcopy(pareto_line)
+
             #normalize the total probablility to 1
+            temp = 0.0
             for i in range (ncore):
                 prob[i] = prob[i] / total_prob 
                 temp = temp + prob[i]
-                biased_prob[i] = temp
-            prob = copy.deepcopy(biased_prob)
+                prob[i] = temp
+            print "probablility:", prob
 
         for atoms in pareto_atoms:
             self.log_paretoAtoms.write(atoms)
@@ -285,7 +294,7 @@ class ParetoLineOptimize(Dynamics):
                continue
         return promoter
 
-    def pareto_push(self, step, pareto_line, pareto_atoms, dot_n, atom_n): 
+    def pareto_push(self, step, node_numb, pareto_line, pareto_atoms, dot_n, atom_n): 
         """
         Parabolic method to determine if accept rn or not
         """
@@ -295,8 +304,8 @@ class ParetoLineOptimize(Dynamics):
            if dot_n[0] < temp[0][0] and dot_n[1] > temp[0][1]:
               pareto_line[0] = dot_n
               pareto_line.append(temp[0])
+              pareto_atoms.append(pareto_atoms[0])
               pareto_atoms[0] = atom_n
-              pareto_atoms.append(atom_n)
            elif dot_n[0] > temp[0][0] and dot_n[1] < temp[0][1]:
               pareto_line.append(dot_n)
               pareto_atoms.append(atom_n)
@@ -304,12 +313,13 @@ class ParetoLineOptimize(Dynamics):
               pareto_line[0] = dot_n
               pareto_atoms[0] = atom_n
            
+           self.logParetoLine(step, node_numb, pareto_line)
            return pareto_line
         
         #more than one dot in pareto_line
         replace = False
         for i in range(0, len(temp)):
-            #pareto_line may be changed after every cycle. Need to find new index for element temp[i]
+            #pareto_line may be changed after each cycle. Need to find new index for element temp[i]
             index = self.find_index(pareto_line, temp[i])
 
             #corner situation
@@ -327,6 +337,7 @@ class ParetoLineOptimize(Dynamics):
                   pareto_line[index] = dot_n
                   pareto_atoms[index] = atom_n
                   replace = True
+                  continue
 
             elif i == len(temp)-2 and i != 0:
                #next to last
@@ -385,13 +396,14 @@ class ParetoLineOptimize(Dynamics):
                #For other situations, no acition is needed
                self.debug.write('%d  %s  %d\n' % (i, 'nothing done',  index))
                continue
-        self.logParetoLine(step, pareto_line)
+        self.logParetoLine(step, node_numb, pareto_line)
         return pareto_line
     
-    def logParetoLine(self, step, pareto_line=[]):
+    def logParetoLine(self, step, node_numb, pareto_line=[]):
         if self.log_paretoLine is None:
             return
-        self.log_paretoLine.write('%s = %d  %s = %d\n' % ("step", step, "dot_number", len(pareto_line)))
+        self.log_paretoLine.write('%s = %d  %s = %d %s = %d\n' % ("step", step, 
+                                   "# of node", node_numb, "dot_number", len(pareto_line)))
         for i in range(0, len(pareto_line)):
              self.log_paretoLine.write('%15.6f  %15.6f\n' % (pareto_line[i][0], pareto_line[i][1]))
         self.log_paretoLine.flush()
@@ -426,8 +438,10 @@ class ParetoLineOptimize(Dynamics):
                return True
         return False
 
-    def find_alpha(self, probability):
+    def find_alpha(self, probability=[]):
         test_prob = np.random.uniform(0,1)
+        if len(probability) == 1:
+           return 0
         for i in range(len(probability)):
             if probability[i] < test_prob and probaility[i+1] >test_prob:
                return i
@@ -532,9 +546,9 @@ class ParetoLineOptimize(Dynamics):
 
     def get_cross(self, config_1, config_2, config_3):
         #calculate the cross vector
-        vect1 = np.subtract(config_1, config_3)
+        vect1 = np.subtract(config_1, config_3) #config_1 - config_3
         vect2 = np.subtract(config_2, config_3)
-        cross_vect = np.cross(vect2, vect1)
+        cross_vect = np.cross(vect2, vect1)  # vect2 X vect1
         return cross_vect
 
     def get_minimum(self):

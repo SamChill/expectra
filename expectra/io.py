@@ -205,8 +205,8 @@ def read_dots(filename):
     for line in f:
         if line.startswith('#'):
            continue
-        fields = [ float(field) for field in line.split()]
-        dot = [fields[4], fields[5]]
+        fields = [ field for field in line.split()]
+        dot = [float(fields[4]), float(fields[5])]
         dots.append(dot)
     f.close()
     return dots
