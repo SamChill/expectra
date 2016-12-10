@@ -81,6 +81,8 @@ class BasinHopping(Dynamics):
         self.move_atoms = move_atoms   
         self.switch = switch
         self.switch_space = switch_space
+        self.elements_lib = elements_lib
+
         self.md = md
         self.md_temperature = md_temperature
         self.md_step_size = md_step_size
