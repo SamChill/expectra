@@ -17,6 +17,11 @@ class ParetoLineOptimize(Dynamics):
                  exafs_calculator = None,
                  ncore = 5,
                  bh_steps = 10,
+                 #Switch or modify elements in structures
+                 move_atoms = True,
+                 switch = False,
+                 switch_space = 1, #How many atoms will be switched or modified
+                 elements_lib = None, #elements used to replace the atoms
                  #MD parameters
                  md = True,
                  md_temperature = 300 * kB,
@@ -69,6 +74,11 @@ class ParetoLineOptimize(Dynamics):
         self.exafs_calculator = exafs_calculator
         self.ncore = ncore
         self.bh_steps = bh_steps
+
+        self.move_atoms = move_atoms
+        self.switch = switch
+        self.switch_space = switch_space
+        self.elements_lib = elements_lib
  
         self.md = md
         self.md_temperature = md_temperature
@@ -168,6 +178,11 @@ class ParetoLineOptimize(Dynamics):
                                    alpha = alpha[i],
                                    opt_calculator = self.opt_calculator,
                                    exafs_calculator = self.exafs_calculator,
+                                   #Switch or modify elements in structures
+                                   move_atoms = self.move_atoms,
+                                   switch = self.switch,
+                                   switch_space = self.switch_space, #How many atoms will be switched or modified
+                                   elements_lib = self.elements_lib, #elements used to replace the atoms
                                    #MD parameters
                                    md = True,
                                    md_temperature = self.md_temperature,
