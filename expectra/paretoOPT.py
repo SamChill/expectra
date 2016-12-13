@@ -144,6 +144,8 @@ class ParetoLineOptimize(Dynamics):
         pareto_line = []
         pareto_atoms = []
         images = []
+        E_factor = None
+        S_factor = None
         for i in range (ncore):
             alpha_list.append(float(i) * interval)
             prob.append(interval)
@@ -160,9 +162,14 @@ class ParetoLineOptimize(Dynamics):
                 if step == 0:
                    index = i
                    atoms = self.atoms
+                   scale_ratio = 1
                 else:
+                   if E_factor is None or S_factor is None:
+                      print "E_factor or S_factor is not calculated correctly"
+                      break
                    index = self.find_alpha(prob)
                    atoms = images[i]
+                   scale_ratio = E_factor/S_factor
                 alpha.append(np.random.uniform(alpha_list[index], alpha_list[index+1]))
                 print "alpha:", alpha[i], "i = ", i
 
@@ -176,6 +183,7 @@ class ParetoLineOptimize(Dynamics):
                 lm_trajectory = self.local_minima_trajectory + "_" + pareto_step + "_" + node_numb
                 opt = BasinHopping(atoms,
                                    alpha = alpha[i],
+                                   scale_ratio = scale_ratio,
                                    opt_calculator = self.opt_calculator,
                                    exafs_calculator = self.exafs_calculator,
                                    #Switch or modify elements in structures
@@ -240,6 +248,7 @@ class ParetoLineOptimize(Dynamics):
                 total_prob = total_prob + prob[i]
             
             pareto_base = copy.deepcopy(pareto_line)
+            S_factor, E_factor = self.find_scale_factor(pareto_base)
 
             #normalize the total probablility to 1
             temp = 0.0
@@ -541,23 +550,31 @@ class ParetoLineOptimize(Dynamics):
 
         return sorted_dots, alpha_mid
 
-    def scale_dots(self, parabola, dots):
-        
-        S_factor = parabola[0][1] - parabola[len(parabola)-1][1]
-        E_factor = parabola[len(parabola)-1][0] - parabola[0][0]
-        scale_ratio = S_factor / E_factor
-        
-        for i in range(len(parabola)): 
-            E_scaled = parabola[i][0]/E_factor
-            S_scaled = parabola[i][1]/S_factor
-            parabola[i] = ([E_scaled, S_scaled])
+    def find_scale_factor(self, pareto_line):
+        if len(pareto_line) == 1:
+           S_max = pareto_line[0][1]
+           S_min = 0.0
+           E_max = pareto_line[0][0]
+           E_max = 0.0
+        elif len(pareto_line) == 0:
+           return
+        else:
+           S_max = pareto_line[0][1]
+           S_min = pareto_line[len(pareto_line)-1][1]
+           E_max = pareto_line[len(pareto_line)-1][0]
+           E_min = pareto_line[0][0]
 
+        S_factor = S_max - S_min
+        E_factor = E_max - E_min
+        
+        return S_factor, E_factor
+
+    def scale_dots(self, dots, S_factor, E_factor)
         for dot in dots: 
             E_scaled = dot[0]/E_factor
             S_scaled = dot[1]/S_factor
             dot = ([E_scaled, S_scaled])
-
-        return parabola, dots, scale_ratio
+        return dots
 
     def get_cross(self, config_1, config_2, config_3):
         #calculate the cross vector

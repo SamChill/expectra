@@ -30,6 +30,7 @@ class BasinHopping(Dynamics):
 
     def __init__(self, atoms,
                  alpha = 0,
+                 scale_ratio = 1,
                  pareto_step = None,
                  node_numb = None,
                  opt_calculator = None,
@@ -95,6 +96,7 @@ class BasinHopping(Dynamics):
         self.dr = dr
         self.z_min = z_min
         self.alpha = alpha
+        self.scale_ratio = scale_ratio
         self.substrate = substrate
         self.absorbate = absorbate
 
@@ -166,13 +168,14 @@ class BasinHopping(Dynamics):
         """Hop the basins for defined number of steps."""
         self.steps = 0
         alpha = self.alpha
+        scale_ratio = self.scale_ratio
         ro = self.atoms.get_positions()
         self.exafs_log = open(self.exafs_logfile, 'w')
         Eo = self.get_energy(ro, -1)
         chi_o = self.get_chi_deviation(ro, -1)
         print 'Energy: ', Eo, 'chi_differ: ', chi_o
         print '====================================================================='
-        Uo = (1.0 - alpha ) * Eo + alpha * chi_o
+        Uo = (1.0 - alpha ) * Eo + alpha * scale_ratio * chi_o
         self.log(-1,'Yes', alpha, Eo, self.chi_differ, Uo, self.Umin)
 
         acceptnum = 0
@@ -192,7 +195,7 @@ class BasinHopping(Dynamics):
                 chi_n = self.get_chi_deviation(self.atoms.get_positions(), step)
                 print 'Energy: ', En, 'chi_differ: ', chi_n
                 print '====================================================================='
-                Un = En + alpha * chi_n
+                Un = En + alpha * scale_ratio * chi_n
             if Un < self.Umin:
                 self.Umin = Un
                 self.rmin = self.atoms.get_positions()
