@@ -10,6 +10,7 @@ from ase.parallel import world
 from ase.io.trajectory import Trajectory
 from expectra.basin_surface import BasinHopping
 from expectra.io import read_dots
+
 class ParetoLineOptimize(Dynamics):
 
     def __init__(self, atoms,
@@ -17,6 +18,8 @@ class ParetoLineOptimize(Dynamics):
                  exafs_calculator = None,
                  ncore = 5,
                  bh_steps = 10,
+                 scale = False,
+                 mini_output = True, #minima output
                  #Switch or modify elements in structures
                  move_atoms = True,
                  switch = False,
@@ -74,6 +77,7 @@ class ParetoLineOptimize(Dynamics):
         self.exafs_calculator = exafs_calculator
         self.ncore = ncore
         self.bh_steps = bh_steps
+        self.scale = scale
 
         self.move_atoms = move_atoms
         self.switch = switch
@@ -162,7 +166,9 @@ class ParetoLineOptimize(Dynamics):
                 if step == 0:
                    index = i
                    atoms = self.atoms
-                   scale_ratio = 1
+                   scale_ratio = 1.0
+                elif not scale:
+                   scale_ratio = 1.0
                 else:
                    if E_factor is None or S_factor is None:
                       print "E_factor or S_factor is not calculated correctly"
@@ -192,7 +198,7 @@ class ParetoLineOptimize(Dynamics):
                                    switch_space = self.switch_space, #How many atoms will be switched or modified
                                    elements_lib = self.elements_lib, #elements used to replace the atoms
                                    #MD parameters
-                                   md = True,
+                                   md = self.md,
                                    md_temperature = self.md_temperature,
                                    md_step_size = self.md_step_size,
                                    md_step = self.md_step,
@@ -257,7 +263,11 @@ class ParetoLineOptimize(Dynamics):
                 temp = temp + prob[i]
                 prob[i] = temp
             print "probablility:", prob
-
+        if pareto_atoms is None:
+           print "Something wrong on pareto_atoms", type(pareto_atoms)
+        else:
+           print "tyep of pareto_atoms", type(pareto_atoms[0])
+           print(pareto_atoms[0])
         for atoms in pareto_atoms:
             self.log_paretoAtoms.write(atoms)
      
@@ -467,7 +477,7 @@ class ParetoLineOptimize(Dynamics):
         if len(probability) == 1:
            return 0
         for i in range(len(probability)):
-            if probability[i] < test_prob and probaility[i+1] >test_prob:
+            if probability[i] < test_prob and probability[i+1] >test_prob:
                return i
 
     def find_index(self, parabola, temp):
@@ -555,7 +565,7 @@ class ParetoLineOptimize(Dynamics):
            S_max = pareto_line[0][1]
            S_min = 0.0
            E_max = pareto_line[0][0]
-           E_max = 0.0
+           E_min = 0.0
         elif len(pareto_line) == 0:
            return
         else:
@@ -569,7 +579,7 @@ class ParetoLineOptimize(Dynamics):
         
         return S_factor, E_factor
 
-    def scale_dots(self, dots, S_factor, E_factor)
+    def scale_dots(self, dots, S_factor, E_factor):
         for dot in dots: 
             E_scaled = dot[0]/E_factor
             S_scaled = dot[1]/S_factor
