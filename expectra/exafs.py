@@ -1,10 +1,12 @@
 import numpy
+import sys
+sys.setrecursionlimit(10000)
+
 from time import strftime
 from ase.build import bulk
 from ase.neighborlist import NeighborList
 from ase import units
 from expectra.feff import feff_edge_number, run_feff
-
 from mpi4py import MPI
 COMM_WORLD = MPI.COMM_WORLD
 
@@ -155,7 +157,7 @@ def exafs_multiple_scattering(S02, energy_shift, absorber,
 
             if atoms[i].symbol != absorber:
                 continue
-
+#            print "feff run for ", counter
             k, chi = run_feff(atoms, i, feff_options)
             if k is None and chi is None:
                 continue
@@ -167,6 +169,7 @@ def exafs_multiple_scattering(S02, energy_shift, absorber,
 
     #in case too many ranks
     k = COMM_WORLD.bcast(k)
+    #print "k values:", k
     if chi_total is None:
         chi_total = numpy.zeros(len(k))
 

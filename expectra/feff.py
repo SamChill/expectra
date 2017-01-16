@@ -8,7 +8,6 @@ import numpy
 
 from ase import Atoms, Atom
 
-
 def feff_edge_number(edge):
     edge_map = {}
     edge_map['k'] = 1
@@ -205,8 +204,11 @@ def run_feff(atoms, absorber, feff_options={}, tmp_dir=None, get_path=False):
 
     stdout, stderr = p.communicate()
     stderr = stderr.strip()
-    if stderr == "hash error":
-        atoms[absorber].set_position(atoms[absorber].get_position()+0.001)
+#    print 'stdout:', stdout
+#    print 'Stderr:', stderr
+    if "hash error" in stderr:
+        atoms[absorber].position = atoms[absorber].position+0.001
+#        atoms[absorber].set_position(atoms[absorber].get_position()+0.001)
         sys.stderr.write("%s\n"%stderr)
         return run_feff(atoms, absorber, feff_options, tmp_dir)
 

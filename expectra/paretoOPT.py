@@ -9,22 +9,24 @@ from ase.units import kB, fs
 from ase.parallel import world
 from ase.io.trajectory import Trajectory
 from expectra.basin_surface import BasinHopping
-from expectra.io import read_dots
+from expectra.io import read_dots, read_atoms, write_atoms
 
 class ParetoLineOptimize(Dynamics):
 
     def __init__(self, atoms,
                  opt_calculator = None,
                  exafs_calculator = None,
-                 ncore = 5,
+                 nnode = 5,
+                 ncore = 2,
                  bh_steps = 10,
+                 bh_steps_0 = 10,
                  scale = False,
                  mini_output = True, #minima output
-                 #Switch or modify elements in structures
-                 move_atoms = True,
-                 switch = False,
-                 switch_space = 1, #How many atoms will be switched or modified
-                 elements_lib = None, #elements used to replace the atoms
+                 #Modify composition by randomly switching chemical symbol in structures
+                 move_atoms = True, #if true, the position of atoms will be modified as normal basin hopping
+                 switch = False,    #if true, the chemical symbols of atoms in the active space (defined by switch_ratio) is switchable
+                 switch_ratio = 0.1, #percentage of atoms that used to modify composition
+                 elements_lib = None, #library of elements where the chemical symbols are picked to modify composition
                  #MD parameters
                  md = True,
                  md_temperature = 300 * kB,
@@ -50,8 +52,8 @@ class ParetoLineOptimize(Dynamics):
                  mss=0.2,
                  minenergy=None,
                  distribution='uniform',
-                 adjust_step_size=None,
-                 adjust_every = None,
+                 adjust_step=True,
+                 adjust_every = 5,
                  target_ratio = 0.5,
                  adjust_fraction = 0.05,
                  significant_structure = False,  # displace from minimum at each move
@@ -75,13 +77,15 @@ class ParetoLineOptimize(Dynamics):
         self.atoms = atoms
         self.opt_calculator = opt_calculator
         self.exafs_calculator = exafs_calculator
+        self.nnode = nnode
         self.ncore = ncore
         self.bh_steps = bh_steps
+        self.bh_steps_0 = bh_steps_0
         self.scale = scale
 
         self.move_atoms = move_atoms
         self.switch = switch
-        self.switch_space = switch_space
+        self.switch_ratio = switch_ratio
         self.elements_lib = elements_lib
  
         self.md = md
@@ -109,12 +113,12 @@ class ParetoLineOptimize(Dynamics):
         if isinstance(log_paretoLine, str):
             self.log_paretoLine = open(self.log_paretoLine, 'w')
 
-        if isinstance(log_paretoAtoms, str):
-            self.log_paretoAtoms = Trajectory(self.log_paretoAtoms,
-                                                  'w', atoms)
+        #if isinstance(log_paretoAtoms, str):
+        #    self.log_paretoAtoms = Trajectory(self.log_paretoAtoms,
+        #                                          'w', atoms)
         self.minenergy = minenergy
         self.distribution = distribution
-        self.adjust_step_size = adjust_step_size
+        self.adjust_step = adjust_step
         self.adjust_every = adjust_every
         self.adjust_cm = adjust_cm
         self.target_ratio = target_ratio
@@ -139,19 +143,21 @@ class ParetoLineOptimize(Dynamics):
         """Hop the basins for defined number of steps."""
 
         #initialize alpha and probablility for each basin hopping jobs
-        ncore = self.ncore
-        interval = 1.0 / float(ncore)
+        nnode = self.nnode
+        interval = 1.0 / float(nnode)
         target_ratio = interval
         alpha_list = []
         prob = []
+        accept_ratio = []
         pareto_base = []
         pareto_line = []
         pareto_atoms = []
         images = []
         E_factor = None
         S_factor = None
-        for i in range (ncore):
+        for i in range (nnode):
             alpha_list.append(float(i) * interval)
+            accept_ratio.append(0.0)
             prob.append(interval)
             images.append(None)
         alpha_list.append(1.0)
@@ -159,27 +165,38 @@ class ParetoLineOptimize(Dynamics):
         for step in range(steps):
             total_prob = 0.0
             alpha = []
+
+            if step == 0:
+               bh_steps = self.bh_steps_0
+            else:
+               bh_steps = self.bh_steps
+
             print "====================================================================="
-            for i in range (ncore):
+            for i in range (nnode):
                 print "====================================================================="
                 #select alpha
                 if step == 0:
                    index = i
                    atoms = self.atoms
                    scale_ratio = 1.0
-                elif not scale:
+                elif not self.scale:
                    scale_ratio = 1.0
+                   atoms = images[i]
+                   index = self.find_alpha(prob)
                 else:
+                   print "Scale ratio is calculated based on the current paretoLine for each paretoCycle"
                    if E_factor is None or S_factor is None:
                       print "E_factor or S_factor is not calculated correctly"
                       break
                    index = self.find_alpha(prob)
                    atoms = images[i]
                    scale_ratio = E_factor/S_factor
+                print "Index: ", index
                 alpha.append(np.random.uniform(alpha_list[index], alpha_list[index+1]))
                 print "alpha:", alpha[i], "i = ", i
 
                 #run BasinHopping
+                #define file names used to store data
                 pareto_step = str(step)
                 node_numb = str(i)
                 trajectory = self.trajectory+'_'+ pareto_step + "_" + node_numb + ".traj"
@@ -192,10 +209,11 @@ class ParetoLineOptimize(Dynamics):
                                    scale_ratio = scale_ratio,
                                    opt_calculator = self.opt_calculator,
                                    exafs_calculator = self.exafs_calculator,
+                                   ncore = self.ncore,
                                    #Switch or modify elements in structures
                                    move_atoms = self.move_atoms,
                                    switch = self.switch,
-                                   switch_space = self.switch_space, #How many atoms will be switched or modified
+                                   switch_ratio = self.switch_ratio, #How many atoms will be switched or modified
                                    elements_lib = self.elements_lib, #elements used to replace the atoms
                                    #MD parameters
                                    md = self.md,
@@ -220,7 +238,7 @@ class ParetoLineOptimize(Dynamics):
                                    mss = self.mss,
                                    minenergy = self.minenergy,
                                    distribution = self.distribution,
-                                   adjust_step_size = self.adjust_step_size,
+                                   adjust_step = self.adjust_step,
                                    adjust_every = self.adjust_every,
                                    target_ratio = self.target_ratio,
                                    adjust_fraction = self.adjust_fraction,
@@ -229,13 +247,14 @@ class ParetoLineOptimize(Dynamics):
                                    pushapart = self.pushapart,
                                    jumpmax = self.jumpmax,
                                    )
-                opt.run(self.bh_steps)
+
+                images[i] = opt.run(bh_steps)
 
                 #read the dots and geometries obtained from basin hopping
                 dots = read_dots(logfile)
-                lowest_traj = Trajectory(trajectory)
-                images[i] = lowest_traj[-1]
-                traj = Trajectory(lm_trajectory)
+                #lowest_traj = Trajectory(trajectory)
+                #images[i] = lowest_traj[-1]
+                traj = read_atoms(lm_trajectory)
 
                 #initialize pareto line
                 if step == 0 and i == 0:
@@ -250,26 +269,28 @@ class ParetoLineOptimize(Dynamics):
                     if promoter:
                        pareto_line = self.pareto_push(step, i, pareto_line, pareto_atoms, dots[j], traj[j])
                        accepted_numb += 1 
-                prob[i] = prob[i] + accepted_numb / len(dots)
-                total_prob = total_prob + prob[i]
+                accept_ratio[i] = accept_ratio[i] + accepted_numb / len(dots)
+                #prob[i] = prob[i] + accepted_numb / len(dots)
+                total_prob = total_prob + accept_ratio[i]
             
             pareto_base = copy.deepcopy(pareto_line)
             S_factor, E_factor = self.find_scale_factor(pareto_base)
 
             #normalize the total probablility to 1
             temp = 0.0
-            for i in range (ncore):
-                prob[i] = prob[i] / total_prob 
-                temp = temp + prob[i]
+            for i in range (nnode):
+                temp = temp + accept_ratio[i] / total_prob 
                 prob[i] = temp
-            print "probablility:", prob
+            print "Probablility:", prob
         if pareto_atoms is None:
            print "Something wrong on pareto_atoms", type(pareto_atoms)
         else:
            print "tyep of pareto_atoms", type(pareto_atoms[0])
            print(pareto_atoms[0])
-        for atoms in pareto_atoms:
-            self.log_paretoAtoms.write(atoms)
+
+           write_atoms(self.log_paretoAtoms, pareto_atoms)
+#        for atoms in pareto_atoms:
+#            self.log_paretoAtoms.write(atoms)
      
     """
         for step in range(steps):
@@ -477,7 +498,9 @@ class ParetoLineOptimize(Dynamics):
         if len(probability) == 1:
            return 0
         for i in range(len(probability)):
-            if probability[i] < test_prob and probability[i+1] >test_prob:
+            if test_prob >= 0.0 and tst_prob < probability[0]:
+               return 0
+            if test_prob >= probability[i]and probability[i+1] >test_prob:
                return i
 
     def find_index(self, parabola, temp):

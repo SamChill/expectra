@@ -1,13 +1,16 @@
 import mpi4py.MPI
 import numpy as np
 
+from time import strftime
 from ase.optimize.optimize import Dynamics
 from ase.optimize.fire import FIRE
 from ase.units import kB, fs
 from ase.parallel import world
 from ase.io.trajectory import PickleTrajectory
 from ase.io.trajectory import Trajectory
+from ase.io import write
 from expectra.md import run_md
+from expectra.lammps_caller import lammps_caller
 import random
 import sys
 import os
@@ -30,15 +33,16 @@ class BasinHopping(Dynamics):
 
     def __init__(self, atoms,
                  alpha = 0,
-                 scale_ratio = 1,
+                 scale_ratio = 1.0,
                  pareto_step = None,
                  node_numb = None,
+                 ncore = 2,
                  opt_calculator = None,
                  exafs_calculator = None,
                  #Switch or modify elements in structures
                  move_atoms = True,
                  switch = False,
-                 switch_space = 1, #How many atoms will be switched or modified
+                 switch_ratio = 0.1, #percentage of atoms will be used to switch or modified
                  elements_lib = None, #elements used to replace the atoms
                  #MD parameters
                  md = True,
@@ -46,8 +50,11 @@ class BasinHopping(Dynamics):
                  md_step_size = 1 * fs,
                  md_step = 1000,
                  md_trajectory = 'md',
+                 specorder = None, #for 'lammps', specify the order of species which should be same to that in potential file
                  #Basin Hopping parameters
                  optimizer=FIRE,
+                 adjust_temperature = True,
+                 temp_adjust_fraction = 0.01,
                  temperature=100 * kB,
                  fmax=0.1,
                  dr=0.1,
@@ -63,10 +70,10 @@ class BasinHopping(Dynamics):
                  mss=0.2,
                  minenergy=None,
                  distribution='uniform',
-                 adjust_step_size=None,
+                 adjust_step= True,
                  adjust_every = None,
                  target_ratio = 0.5,
-                 adjust_fraction = 0.05,
+                 adjust_fraction = 0.005,
                  significant_structure = False,  # displace from minimum at each move
                  significant_structure2 = False, # displace from global minimum found so far at each move
                  pushapart = 0.4,
@@ -75,13 +82,21 @@ class BasinHopping(Dynamics):
 
         self.pareto_step = str(pareto_step)
         self.node_numb = str(node_numb)
+        self.ncore = ncore
         self.trajectory = trajectory
         self.opt_calculator = opt_calculator
         self.exafs_calculator = exafs_calculator
 
+        if self.opt_calculator == 'lammps':
+           print "lammps is true"
+           self.lammps = True
+        else:
+           self.lammps = False
+
         self.move_atoms = move_atoms   
         self.switch = switch
-        self.switch_space = switch_space
+        self.switch_ratio = switch_ratio
+        self.switch_space = int(switch_ratio * len(atoms))
         self.elements_lib = elements_lib
 
         self.md = md
@@ -89,8 +104,11 @@ class BasinHopping(Dynamics):
         self.md_step_size = md_step_size
         self.md_step = md_step
         self.md_trajectory = md_trajectory
+        self.specorder = specorder
 
         self.optimizer = optimizer
+        self.adjust_temperature = adjust_temperature
+        self.temp_adjust_fraction = temp_adjust_fraction
         self.kT = temperature
         self.fmax = fmax
         self.dr = dr
@@ -110,20 +128,19 @@ class BasinHopping(Dynamics):
 
         self.optimizer_logfile = optimizer_logfile 
         self.lm_traject = local_minima_trajectory
+        self.log_trajectory = self.lm_traject
         if isinstance(local_minima_trajectory, str):
-            self.lm_trajectory = Trajectory(self.lm_traject,
-                                                  'w', atoms)
+           self.log_trajectory = open(self.log_trajectory, 'w')
+       # if isinstance(local_minima_trajectory, str):
+       #     self.lm_trajectory = Trajectory(self.lm_traject,
+       #                                           'w', atoms)
        # if isinstance(local_minima_trajectory, str):
        #     tsase.io.write_con(self.lm_trajectory,atoms,w='w')
-        self.traj_nonOPT = Trajectory("traj_before_push.traj",
-                                                  'w', atoms)
-        self.cst_nonOPT = Trajectory("cst_after_push.traj",
-                                                  'w', atoms)
         self.all_local = Trajectory("all_opted_local.traj",
                                                   'w', atoms)
         self.minenergy = minenergy
         self.distribution = distribution
-        self.adjust_step = adjust_step_size
+        self.adjust_step = adjust_step
         self.adjust_every = adjust_every
         self.target_ratio = target_ratio
         self.adjust_fraction = adjust_fraction
@@ -147,6 +164,7 @@ class BasinHopping(Dynamics):
         return d
 
     def initialize(self):
+        self.atoms_recording=None
         self.k = None
         self.chi = None
         self.chi_deviation = 100.00
@@ -157,6 +175,7 @@ class BasinHopping(Dynamics):
         self.rmin = self.atoms.get_positions()
         self.positions = self.atoms.get_positions()
         self.call_observers()
+        self.time_stamp=None
 #        self.log(-1, self.Emin, self.Emin,self.dr)
                 
         #'logfile' is defined in the superclass Dynamics in 'optimize.py'
@@ -169,14 +188,22 @@ class BasinHopping(Dynamics):
         self.steps = 0
         alpha = self.alpha
         scale_ratio = self.scale_ratio
+        atom_min = None
+
+        print 'Scale ratio: ', scale_ratio
+
         ro = self.atoms.get_positions()
+        symbol_o = self.atoms.get_chemical_symbols()
+        self.time_stamp = strftime("%F %T")
+
         self.exafs_log = open(self.exafs_logfile, 'w')
-        Eo = self.get_energy(ro, -1)
+        Eo = self.get_energy(ro, symbol_o, -1)
         chi_o = self.get_chi_deviation(ro, -1)
         print 'Energy: ', Eo, 'chi_differ: ', chi_o
         print '====================================================================='
         Uo = (1.0 - alpha ) * Eo + alpha * scale_ratio * chi_o
-        self.log(-1,'Yes', alpha, Eo, self.chi_differ, Uo, self.Umin)
+        self.log_atoms(-1)
+        self.log(-1, True, alpha, Eo, self.chi_differ, Uo, Uo)
 
         acceptnum = 0
         recentaccept = 0
@@ -187,26 +214,39 @@ class BasinHopping(Dynamics):
             self.chi_differ = []
             while Un is None:
                 if self.switch:
-                   self.switch_elements(ro)
+                   symbol_n = self.switch_elements(symbol_o)
                    rn = ro
                 if self.move_atoms:
                    rn = self.move(ro)
-                En = self.get_energy(rn, step)
+                   symbol_n = symbol_o
+                self.time_stamp = strftime("%F %T")
+                En = self.get_energy(rn, symbol_n, step)
+                self.log_atoms(step)
                 chi_n = self.get_chi_deviation(self.atoms.get_positions(), step)
                 print 'Energy: ', En, 'chi_differ: ', chi_n
                 print '====================================================================='
-                Un = En + alpha * scale_ratio * chi_n
+                Un =(1 - alpha) * En + alpha * scale_ratio * chi_n
             if Un < self.Umin:
                 self.Umin = Un
                 self.rmin = self.atoms.get_positions()
-                self.call_observers()
+                if not self.switch:
+                   self.call_observers()
+                #record the atoms with minimum U
+                atom_min = self.atoms
 
             #accept or reject?
-            accept = np.exp((Uo - Un) / self.kT) > np.random.uniform()
-            if rejectnum > self.jumpmax:
+            #take care of overflow problem for exp function
+            if Un < Uo:
+               accept = True
+            else:
+               accept = np.exp((Uo - Un) / self.kT) > np.random.uniform()
+
+            if rejectnum > self.jumpmax and self.jumpmax is not None:
                 accept = True
                 rejectnum = 0
+            print "accept: ", accept
             if accept:
+                print "accepted"
                 acceptnum += 1.
                 recentaccept += 1.
                 rejectnum = 0
@@ -214,6 +254,8 @@ class BasinHopping(Dynamics):
                     ro = self.local_min_pos.copy()
                 else:
                     ro = rn.copy()
+                    if self.switch:
+                       symbol_o = symbol_n
                 Uo = Un
                # if self.lm_trajectory is not None:
                #     tsase.io.write_con(self.lm_trajectory,self.atoms,w='a')
@@ -229,17 +271,28 @@ class BasinHopping(Dynamics):
                     recentaccept = 0.
                     if ratio > self.target_ratio:
                        self.dr = self.dr * (1+self.adjust_fraction)
+                       if self.adjust_temperature:
+                          self.kT = self.kT * (1 - self.temp_adjust_fraction)
+                       if self.switch:
+                          self.switch_ratio = self.switch_ratio * (1-self.adjust_fraction)
                     elif ratio < self.target_ratio:
                         self.dr = self.dr * (1-self.adjust_fraction)
+                        if self.adjust_temperature:
+                           self.kT = self.kT * (1 + self.temp_adjust_fraction)
+                        if self.switch:
+                           self.switch_ratio = self.switch_ratio * (1+self.adjust_fraction)
             self.log(step, accept, alpha, En, self.chi_differ, Un, self.Umin)
+
+        return atom_min
 
     def log(self, step, accept, alpha, En, chi_differ, Un, Umin):
         if self.logfile is None:
             return
         name = self.__class__.__name__
-        temp_chi = '  '.join(chi_differ)
-        self.logfile.write('%s: %d  %s  %15.6f  %15.6f    %s   %15.6f  %15.6f\n'
-                           % (name, step, accept, alpha, En, temp_chi, Un, Umin))
+        temp_chi = '   '.join(map(str, chi_differ))
+        self.logfile.write('%s: %d  %d  %10.2f %10.2f  %15.6f  %15.6f  %15.6f  %s  %15.6f  %15.6f  %s\n'
+                           % (name, step, accept, self.kT/kB, self.switch_ratio, alpha, 
+                           En, self.chi_deviation, temp_chi, Un, Umin, self.time_stamp))
         self.logfile.flush()
 
     def log_exafs(self, step, absorber):
@@ -249,6 +302,14 @@ class BasinHopping(Dynamics):
         for i in xrange(len(k)):
             self.exafs_log.write("%6.3f %16.8e\n" % (k[i], chi[i]))
         self.exafs_log.flush()
+
+    def log_atoms(self,step):
+        self.log_trajectory.write("%d\n" % (len(self.atoms)))
+        self.log_trajectory.write("node: %s  step: %d\n" %(self.node_numb, step))
+        for atom in self.atoms:
+            self.log_trajectory.write("%s  %15.6f  %15.6f  %15.6f\n" % (atom.symbol,
+                                     atom.x, atom.y, atom.z))
+        self.log_trajectory.flush()
 
     def move(self, ro):
         """Move atoms by a random step."""
@@ -288,8 +349,6 @@ class BasinHopping(Dynamics):
         else:
             rn = ro + disp
         atoms.set_positions(rn)
-        if self.traj_nonOPT is not None:
-            self.traj_nonOPT.write(atoms)
         if self.absorbate is not None:
            rn = self.push_to_surface(rn)
         rn = self.push_apart(rn)
@@ -302,16 +361,21 @@ class BasinHopping(Dynamics):
         atoms.set_positions(rn)
         return atoms.get_positions()
 
-    def switch_elements(self, ro):
+    def switch_elements(self, symbols):
         atoms = self.atoms
+        atoms.set_chemical_symbols(symbols)
         elements_lib = self.elements_lib
-        switch_space = self.switch_space
+        switch_space = int(self.switch_ratio * len(atoms))
         chemical_symbols = atoms.get_chemical_symbols()
         index=random.sample(xrange(len(atoms)), switch_space)
-        while (chemical_symbols == atoms.get_chemical_symbols()):
+        while (chemical_symbols == symbols):
+              print "Switching elements"
               for i in range (switch_space):
-                  chimical_symbols[index[i]] = random.choice(elements_lib)
-        self.atoms.set_chemical_symbols(chemical_symbols)
+                  chemical_symbols[index[i]] = random.choice(elements_lib)
+
+        #self.atoms.set_chemical_symbols(chemical_symbols)
+        #write('switched.traj',images=self.atoms,format='traj')
+        return chemical_symbols
 
     def get_minimum(self):
         """Return minimal energy and configuration."""
@@ -320,45 +384,64 @@ class BasinHopping(Dynamics):
         print 'get_minimum',self.Umin
         return self.Umin, atoms
   
-    def get_energy(self, positions, step):
+    def get_energy(self, positions, symbols, step):
         """Return the energy of the nearest local minimum."""
 #        if np.sometrue(self.positions != positions):
         self.positions = positions
         self.atoms.set_positions(positions)
+        self.atoms.set_chemical_symbols(symbols)
         try:
-            self.atoms.set_calculator(self.opt_calculator)
-            if self.optimizer.__name__ == "FIRE":
-               opt = self.optimizer(self.atoms,
-                                        logfile=self.optimizer_logfile)
+            if self.lammps:
+               print "lammps is running to optimize geometry"
+               lp =lammps_caller(atoms=self.atoms,
+                                 ncore = self.ncore,
+                                 specorder = self.specorder)
+               self.energy, self.atoms = lp.get_energy()
             else:
-               opt = self.optimizer(self.atoms,
-                                        logfile=self.optimizer_logfile,
-                                        maxstep=self.mss)
-            opt.run(fmax=self.fmax)
-            self.energy = self.atoms.get_potential_energy()
+               self.atoms.set_calculator(self.opt_calculator)
+               if self.optimizer.__name__ == "FIRE":
+                  opt = self.optimizer(self.atoms,
+                                           logfile=self.optimizer_logfile)
+               else:
+                  opt = self.optimizer(self.atoms,
+                                           logfile=self.optimizer_logfile,
+                                           maxstep=self.mss)
+               opt.run(fmax=self.fmax)
+               self.energy = self.atoms.get_potential_energy()
 
-            if self.lm_trajectory is not None:
-                self.lm_trajectory.write(self.atoms)
+#            write('opted.traj',images=self.atoms,format='traj')
+#            write('opted.xyz',images=self.atoms_recording,format='xyz')
+
+#            if self.lm_trajectory is not None:
+#                self.lm_trajectory.write(self.atoms)
+               
 
             print 'Total energy: ', self.energy
             print '--------------------------------------------'
 
             if self.md:
-               md_trajectory = self.md_trajectory+"_"+str(step)+".traj"
-               run_md(atoms=self.atoms, 
-                      md_step = self.md_step,
-                      temperature = self.md_temperature,
-                      step_size = self.md_step_size,
-                      trajectory = md_trajectory)
+               if self.lammps:
+                  lp =lammps_caller(atoms=self.atoms,
+                                    ncore = self.ncore,
+                                    specorder = ['Rh', 'Au'])
+                  lp.run('md')
+               else:
+                  md_trajectory = self.md_trajectory+"_"+str(step)+".traj"
+                  run_md(atoms=self.atoms, 
+                         md_step = self.md_step,
+                         temperature = self.md_temperature,
+                         step_size = self.md_step_size,
+                         trajectory = md_trajectory)
 
             print '--------------------------------------------'
             
-            if self.all_local is not None:
-               self.all_local.write(self.atoms)
-               self.local_min_pos = self.atoms.get_positions()
+#            if self.all_local is not None:
+#               self.all_local.write(self.atoms)
+#               self.local_min_pos = self.atoms.get_positions()
         except:
                 # Something went wrong.
                 # In GPAW the atoms are probably to near to each other.
+            print "Optimizer or MD error"
             return "Optimizer or MD error"
         
         return self.energy
@@ -368,21 +451,23 @@ class BasinHopping(Dynamics):
         experimental."""
         self.positions = positions
         self.atoms.set_positions(positions)
-        md_trajectory = self.md_trajectory+"_"+str(step)+".traj"
-        print 'Calculate exafs with md trajectory:'
+
+        if self.lammps:
+           md_trajectory = 'trj_lammps'
+        else:
+           md_trajectory = self.md_trajectory+"_"+str(step)+".traj"
+
         try: 
             if isinstance(self.exafs_calculator, list):
                for calc in self.exafs_calculator:
-                   self.atoms.set_calculator(self.calc)
                    if self.md:
                       print 'MD trajectories are used'
-                      chi_deviation, self.k, self.chi = self.calc.get_chi_differ(filename=md_trajectory)
+                      chi_deviation, self.k, self.chi = calc.get_chi_differ(filename=md_trajectory)
                    else:
                       print 'calculate exafs with optimized structure'
-                      chi_deviation, self.k, self.chi = self.calc.get_chi_differ(atoms=self.atoms)
+                      chi_deviation, self.k, self.chi = calc.get_chi_differ(atoms=self.atoms)
                    self.log_exafs(step, calc.get_absorber())
                    self.chi_differ.append(chi_deviation)
-                   self.chi_deviation = chi_deviation + self.chi_deviation
             else:
                if self.md:
                   print 'MD trajectories are used'
@@ -392,7 +477,8 @@ class BasinHopping(Dynamics):
                   chi_deviation, self.k, self.chi = self.exafs_calculator.get_chi_differ(atoms = self.atoms)
                self.log_exafs(step, self.exafs_calculator.get_absorber())
                self.chi_differ.append(chi_deviation)
-               self.chi_deviation = chi_deviation 
+
+            self.chi_deviation = sum(x for x in self.chi_differ)
                
         except:
             # Something went wrong.

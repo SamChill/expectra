@@ -206,8 +206,43 @@ def read_dots(filename):
         if line.startswith('#'):
            continue
         fields = [ field for field in line.split()]
-        dot = [float(fields[4]), float(fields[5])]
+        dot = [float(fields[6]), float(fields[7])]
         dots.append(dot)
     f.close()
     return dots
+
+#read atom structures stored by log_atoms in basin hopping
+def read_atoms(filename):
+    f = open(filename, 'r')
+    atoms=[]
+
+    while True:
+        elements = []
+        positions = []
+        line = f.readline()
+        if not line:
+           break
+        atom_numb = int(line.split()[0])
+        line = f.readline()
+        for i in range (atom_numb):
+            line = f.readline()
+            fields = line.split()
+            elements.append(fields[0])
+            positions.append( [ float(fields[j+1]) for j in range(3) ] )
+        elements = numpy.array(elements)
+        positions = numpy.array(positions)
+        atoms.append(Atoms(elements, positions=positions))
+    f.close()
+    return atoms
+
+#write a list of atoms with different number of atoms or different elements
+def write_atoms(filename, atoms):
+    f = open(filename, 'w')
+    for i in range (len(atoms)):
+        f.write("%d\n" %(len(atoms[i])))
+        f.write("\n")
+        for atom in atoms[i]:
+            f.write("%s  %15.6f  %15.6f  %15.6f\n" % (atom.symbol,
+                    atom.x, atom.y, atom.z))
+    f.close()
 

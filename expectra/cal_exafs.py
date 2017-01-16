@@ -93,6 +93,7 @@ class Expectra(Calculator):
         energy_shift = 3.4,
         edge = 'L3',
         absorber = 'Au',
+        specorder = "'Rh Au'",
         skip = 0,
         every = 1,
         exp_file = 'chi_exp.dat',
@@ -100,8 +101,8 @@ class Expectra(Calculator):
         real_space = True,
         kweight= 2,
         dk = 1.0,
-        rmin = 0.0,
-        rmax = 8.0,
+        rmin = 2.0,
+        rmax = 6.0,
         ft_part = 'mag')
     """
     set multiple_scattering = '--multiple-scattering' to enalbe multiple
@@ -184,6 +185,7 @@ class Expectra(Calculator):
                          '--edge', parameters.edge,
                          '--absorber', parameters.absorber,
                          ignore,
+                         '--specorder', parameters.specorder,
                          '--skip', str(parameters.skip),
                          '--every', str(parameters.every),
                          self.traj_filename]

@@ -1,0 +1,18 @@
+Traceback (most recent call last):
+  File "/Users/leili/Desktop/computational_codes/expectra/bin/expectra", line 9, in <module>
+    from expectra.exafs import exafs_first_shell, exafs_multiple_scattering
+ImportError: No module named expectra.exafs
+Traceback (most recent call last):
+  File "/Users/leili/Desktop/computational_codes/expectra/bin/expectra", line 9, in <module>
+    from expectra.exafs import exafs_first_shell, exafs_multiple_scattering
+ImportError: No module named expectra.exafs
+Traceback (most recent call last):
+  File "EMT_expectra.py", line 39, in <module>
+    main()
+  File "EMT_expectra.py", line 37, in main
+    plo.run(500)
+  File "../../expectra/paretoOPT.py", line 189, in run
+    opt.run(self.bh_steps)
+  File "../../expectra/basin_surface.py", line 156, in run
+    Uo = (1.0 - alpha ) * Eo + alpha * chi_o
+TypeError: unsupported operand type(s) for *: 'float' and 'NoneType'
