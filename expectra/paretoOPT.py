@@ -33,6 +33,7 @@ class ParetoLineOptimize(Dynamics):
                  md_step_size = 1 * fs,
                  md_step = 1000,
                  md_trajectory = 'md',
+                 specorder=None,
                  #Basin Hopping parameters
                  optimizer = FIRE,
                  temperature=100 * kB,
@@ -93,6 +94,7 @@ class ParetoLineOptimize(Dynamics):
         self.md_step_size = md_step_size
         self.md_step = md_step
         self.md_trajectory = md_trajectory
+        self.specorder = specorder
 
         self.optimizer = optimizer
         self.temperature = temperature
@@ -221,6 +223,7 @@ class ParetoLineOptimize(Dynamics):
                                    md_step_size = self.md_step_size,
                                    md_step = self.md_step,
                                    md_trajectory = md_trajectory,
+                                   specorder = self.specorder,
                                    #Basin Hopping parameters
                                    optimizer = self.optimizer,
                                    temperature = self.temperature,
@@ -268,10 +271,13 @@ class ParetoLineOptimize(Dynamics):
                     promoter = self.dots_filter(pareto_base, dots[j])
                     if promoter:
                        pareto_line = self.pareto_push(step, i, pareto_line, pareto_atoms, dots[j], traj[j])
-                       accepted_numb += 1 
-                accept_ratio[i] = accept_ratio[i] + accepted_numb / len(dots)
+                       accepted_numb += 1
+                print "Accepted number", accepted_numb, "dots number", len(dots)
+                accept_ratio[i] = accept_ratio[i] + float(accepted_numb) / float(len(dots))
+                print "Accepted ratio: ", accept_ratio
                 #prob[i] = prob[i] + accepted_numb / len(dots)
                 total_prob = total_prob + accept_ratio[i]
+                print "Total_prob: ", total_prob
             
             pareto_base = copy.deepcopy(pareto_line)
             S_factor, E_factor = self.find_scale_factor(pareto_base)
@@ -498,7 +504,7 @@ class ParetoLineOptimize(Dynamics):
         if len(probability) == 1:
            return 0
         for i in range(len(probability)):
-            if test_prob >= 0.0 and tst_prob < probability[0]:
+            if test_prob >= 0.0 and test_prob < probability[0]:
                return 0
             if test_prob >= probability[i]and probability[i+1] >test_prob:
                return i

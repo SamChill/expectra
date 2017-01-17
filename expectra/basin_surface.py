@@ -409,7 +409,7 @@ class BasinHopping(Dynamics):
                opt.run(fmax=self.fmax)
                self.energy = self.atoms.get_potential_energy()
 
-#            write('opted.traj',images=self.atoms,format='traj')
+            write('opted.traj',images=self.atoms,format='traj')
 #            write('opted.xyz',images=self.atoms_recording,format='xyz')
 
 #            if self.lm_trajectory is not None:
@@ -423,7 +423,7 @@ class BasinHopping(Dynamics):
                if self.lammps:
                   lp =lammps_caller(atoms=self.atoms,
                                     ncore = self.ncore,
-                                    specorder = ['Rh', 'Au'])
+                                    specorder = self.specorder)
                   lp.run('md')
                else:
                   md_trajectory = self.md_trajectory+"_"+str(step)+".traj"
