@@ -8,7 +8,6 @@ import numpy
 
 from expectra.exafs import exafs_first_shell, exafs_multiple_scattering
 from expectra.io import read_xdatcar, read_con
-from expectra.lammps_caller import read_lammps_trj
 from ase.io.trajectory import Trajectory
 from ase.io import read
 
@@ -79,11 +78,11 @@ def main():
             elif filename[-3:] == 'xyz':
                 trajectory_part = read(filename,index=0,format='xyz')
             elif filename[-3:] == 'raj':
-                print(filename)
                 trajectory_part = Trajectory(filename)
 #                                       index=slice(args.skip, None, args.every), 
 #                                       format='traj')
             elif filename[-6:] == 'lammps':
+                from expectra.lammps_caller import read_lammps_trj
                 trajectory_part = read_lammps_trj(filename,
                                                   skip = args.skip,
                                                   every = args.every,

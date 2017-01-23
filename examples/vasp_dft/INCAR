@@ -1,0 +1,10 @@
+INCAR created by Atomic Simulation Environment
+ SIGMA = 0.100000
+ EDIFF = 1.00e-04
+ PREC = Low
+ ALGO = Fast
+ NELMIN = 8
+ NELM = 200
+ LCHARG = .FALSE.
+ LPLANE = .TRUE.
+ LREAL = .FALSE.

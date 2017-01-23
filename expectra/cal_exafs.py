@@ -168,7 +168,7 @@ class Expectra(Calculator):
         
         #write geoemtry file 'con' if trajectory file doesn't exist
         if self.traj_filename is None:
-           self.traj_filename = 'con'
+           self.traj_filename = 'CONCAR'
            write_vasp(filename = self.traj_filename, atoms = atoms, direct=True, vasp5=True)
 
         #prepare the command to run 'expectra'

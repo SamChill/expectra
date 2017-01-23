@@ -10,7 +10,6 @@ from ase.io.trajectory import PickleTrajectory
 from ase.io.trajectory import Trajectory
 from ase.io import write
 from expectra.md import run_md
-from expectra.lammps_caller import lammps_caller
 import random
 import sys
 import os
@@ -45,7 +44,7 @@ class BasinHopping(Dynamics):
                  switch_ratio = 0.1, #percentage of atoms will be used to switch or modified
                  elements_lib = None, #elements used to replace the atoms
                  #MD parameters
-                 md = True,
+                 md = False,
                  md_temperature = 300 * kB,
                  md_step_size = 1 * fs,
                  md_step = 1000,
@@ -54,7 +53,7 @@ class BasinHopping(Dynamics):
                  #Basin Hopping parameters
                  optimizer=FIRE,
                  adjust_temperature = True,
-                 temp_adjust_fraction = 0.01,
+                 temp_adjust_fraction = 0.02,
                  temperature=100 * kB,
                  fmax=0.1,
                  dr=0.1,
@@ -62,15 +61,15 @@ class BasinHopping(Dynamics):
                  substrate = None,
                  absorbate = None,
                  logfile='basin_log', 
-                 trajectory='lowest',
+                 trajectory='lowest.xyz',
                  optimizer_logfile='-',
-                 local_minima_trajectory='local_minima',
-                 exafs_logfile = 'exafs',
+                 local_minima_trajectory='local_minima.xyz',
+                 exafs_logfile = 'exafs.dat',
                  adjust_cm=True,
                  mss=0.2,
                  minenergy=None,
                  distribution='uniform',
-                 adjust_step= True,
+                 adjust_step= False,
                  adjust_every = None,
                  target_ratio = 0.5,
                  adjust_fraction = 0.005,
@@ -88,6 +87,7 @@ class BasinHopping(Dynamics):
         self.exafs_calculator = exafs_calculator
 
         if self.opt_calculator == 'lammps':
+           from expectra.lammps_caller import lammps_caller
            print "lammps is true"
            self.lammps = True
         else:
@@ -136,8 +136,8 @@ class BasinHopping(Dynamics):
        #                                           'w', atoms)
        # if isinstance(local_minima_trajectory, str):
        #     tsase.io.write_con(self.lm_trajectory,atoms,w='w')
-        self.all_local = Trajectory("all_opted_local.traj",
-                                                  'w', atoms)
+       # self.all_local = Trajectory("all_opted_local.traj",
+       #                                           'w', atoms)
         self.minenergy = minenergy
         self.distribution = distribution
         self.adjust_step = adjust_step
@@ -288,6 +288,11 @@ class BasinHopping(Dynamics):
     def log(self, step, accept, alpha, En, chi_differ, Un, Umin):
         if self.logfile is None:
             return
+        if step == -1:
+           self.logfile.write('#%12s: %s %s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n'
+                               % ("name", "step", "accept", "temperature", "switch_ratio", "alpha", 
+                                  "energy","chi_deviation", "chi", "pseudoPot", "Umin", "time"))
+           
         name = self.__class__.__name__
         temp_chi = '   '.join(map(str, chi_differ))
         self.logfile.write('%s: %d  %d  %10.2f %10.2f  %15.6f  %15.6f  %15.6f  %s  %15.6f  %15.6f  %s\n'
@@ -368,10 +373,15 @@ class BasinHopping(Dynamics):
         switch_space = int(self.switch_ratio * len(atoms))
         chemical_symbols = atoms.get_chemical_symbols()
         index=random.sample(xrange(len(atoms)), switch_space)
-        while (chemical_symbols == symbols):
-              print "Switching elements"
-              for i in range (switch_space):
-                  chemical_symbols[index[i]] = random.choice(elements_lib)
+        for i in range (switch_space):
+            if chemical_symbols[index[i]] == elements_lib[0]:
+               chemical_symbols[index[i]] = elements_lib[1]
+            else: 
+               chemical_symbols[index[i]] = elements_lib[0]
+#        while (chemical_symbols == symbols):
+#              print "Switching elements"
+#              for i in range (switch_space):
+#                  chemical_symbols[index[i]] = random.choice(elements_lib)
 
         #self.atoms.set_chemical_symbols(chemical_symbols)
         #write('switched.traj',images=self.atoms,format='traj')
@@ -451,6 +461,11 @@ class BasinHopping(Dynamics):
         experimental."""
         self.positions = positions
         self.atoms.set_positions(positions)
+
+        if self.exafs_calculator is None:
+           print "Warning: exafs is not calculated. Only energy used for basin hopping"
+           self.chi_deviation = 0.0
+           return 0.0
 
         if self.lammps:
            md_trajectory = 'trj_lammps'

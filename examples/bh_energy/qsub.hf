@@ -1,0 +1,16 @@
+#!/bin/bash
+#
+#$ -cwd
+#$ -j y
+#$ -N vasp_test
+#$ -m es
+#$ -V
+#$ -M leili_ut@gmail.com
+#$ -pe mpi24 24
+#$ -o ll_out
+#$ -e ll_er
+#$ -S /bin/bash
+
+python bh.py
+#python test_lammps_caller.py
+#mpirun -n 24 expectra --multiple-scattering --neighbor-cutoff 6.0 --S02 0.89 --energy-shift -0.11 --edge L3 --absorber Au  --specorder 'Rh Au' --skip 0 --every 1 rhau.xyz
