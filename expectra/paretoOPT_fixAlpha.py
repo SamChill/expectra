@@ -25,8 +25,8 @@ class ParetoLineOptimize(Dynamics):
                  mini_output = True, #minima output
                  #Modify composition by randomly switching chemical symbol in structures
                  move_atoms = True, #if true, the position of atoms will be modified as normal basin hopping
-                 switch = False,    #if true, the chemical symbols of atoms in the active space (defined by active_ratio) is switchable
-                 active_ratio = 0.1, #percentage of atoms that used to modify composition
+                 switch = False,    #if true, the chemical symbols of atoms in the active space (defined by switch_ratio) is switchable
+                 switch_ratio = 0.1, #percentage of atoms that used to modify composition
                  cutoff = None,
                  elements_lib = None, #library of elements where the chemical symbols are picked to modify composition
                  #MD parameters
@@ -89,7 +89,7 @@ class ParetoLineOptimize(Dynamics):
 
         self.move_atoms = move_atoms
         self.switch = switch
-        self.active_ratio = active_ratio
+        self.switch_ratio = switch_ratio
         self.cutoff = cutoff
         self.elements_lib = elements_lib
  
@@ -151,9 +151,6 @@ class ParetoLineOptimize(Dynamics):
 
         #initialize alpha and probablility for each basin hopping jobs
         nnode = self.nnode
-        interval = 1.0 / float(nnode)
-        target_ratio = interval
-        alpha_list = []
         prob = []
         accept_ratio = []
         pareto_base = []
@@ -163,81 +160,39 @@ class ParetoLineOptimize(Dynamics):
         E_factor = None
         S_factor = None
         for i in range (nnode):
-            alpha_list.append(float(i) * interval)
-            accept_ratio.append(interval)
-            prob.append(interval)
+            accept_ratio.append(0.0)
             images.append(None)
-        alpha_list.append(1.0)
 
         for step in range(steps):
             total_prob = 0.0
-            alpha = []
-
             if step == 0:
                bh_steps = self.bh_steps_0
             else:
                bh_steps = self.bh_steps
 
             print "====================================================================="
-            print "ParetoLine cycle ", step
             for i in range (nnode):
                 print "====================================================================="
-                #Fixed alpha
-                if self.alpha is not None:
-                   alpha.append(self.alpha)
-                   if step == 0:
-                      atoms = self.atoms
+                #select alpha
+                if step == 0:
+                   atoms = self.atoms
+                   scale_ratio = 1.0
+                else:
+                   if not self.scale:
                       scale_ratio = 1.0
                    else:
-                      if not self.scale:
-                         scale_ratio = 1.0
-                      else:
-                         scale_ratio = E_factor/S_factor
-                      for j in range (len(pareto_line)):
-                         U = (1.0-alpha[i]) * (pareto_line[j][0]) + alpha[i] * scale_ratio * pareto_line[j][1]
-                         if j == 0:
-                            Umin = U
-                            atoms = pareto_atoms[0]
-                         elif U < Umin:
-                            Umin = U
-                            atoms = pareto_atoms[j]
-                      #atoms from pareto_atoms has no pbc. This bug is to be fixed
-                      atoms.set_cell([[80,0,0],[0,80,0],[0,0,80]],scale_atoms=False,fix=None)
-                
-                else:     
-                   #dynamically select alpha
-                   if step == 0:
-                      index = i
-                      atoms = self.atoms
-                      scale_ratio = 1.0
-                      alpha.append(np.random.uniform(alpha_list[index], alpha_list[index+1]))
-                   else:
-                      if not self.scale:
-                         scale_ratio = 1.0
-                         index = self.find_alpha(prob)
-                      else:
-                         print "Scale ratio is calculated based on the current paretoLine for each paretoCycle"
-                         if E_factor is None or S_factor is None:
-                            print "E_factor or S_factor is not calculated correctly"
-                            break
-                         index = self.find_alpha(prob)
-                         scale_ratio = E_factor/S_factor
-                  
-                      alpha.append(np.random.uniform(alpha_list[index], alpha_list[index+1]))
-                      
-                      for j in range (len(pareto_line)):
-                         U = (1.0-alpha[i]) * (pareto_line[j][0]) + alpha[i] * scale_ratio * pareto_line[j][1]
-                         if j == 0:
-                            Umin = U
-                            atoms = pareto_atoms[0]
-                         elif U < Umin:
-                            Umin = U
-                            atoms = pareto_atoms[j]
-                      #atoms from pareto_atoms has no pbc. This bug is to be fixed
-                      atoms.set_cell([[80,0,0],[0,80,0],[0,0,80]],scale_atoms=False,fix=None)
-                     # write("pl_atoms.trj",images=atoms,format="traj")
+                      print "Scale ratio is calculated based on the current paretoLine for each paretoCycle"
+                      if E_factor is None or S_factor is None:
+                         print "E_factor or S_factor is not calculated correctly"
+                         break
+                      scale_ratio = E_factor/S_factor
+
+                   
+                   atoms = images
+                   #atoms from pareto_atoms has no pbc. This bug is to be fixed
+                   #atoms.set_cell([[80,0,0],[0,80,0],[0,0,80]],scale_atoms=False,fix=None)
+                  # write("pl_atoms.trj",images=atoms,format="traj")
                     
-                print "BasinHopping cycle ", i, "alpha:", alpha[i] 
                 #run BasinHopping
                 #define file names used to store data
                 pareto_step = str(step)
@@ -248,7 +203,7 @@ class ParetoLineOptimize(Dynamics):
                 logfile = self.logfile + "_" + pareto_step + "_" + node_numb
                 lm_trajectory = self.local_minima_trajectory + "_" + pareto_step + "_" + node_numb
                 opt = BasinHopping(atoms,
-                                   alpha = alpha[i],
+                                   alpha = self.alpha,
                                    scale_ratio = scale_ratio,
                                    opt_calculator = self.opt_calculator,
                                    exafs_calculator = self.exafs_calculator,
@@ -256,7 +211,7 @@ class ParetoLineOptimize(Dynamics):
                                    #Switch or modify elements in structures
                                    move_atoms = self.move_atoms,
                                    switch = self.switch,
-                                   active_ratio = self.active_ratio, #How many atoms will be switched or modified
+                                   switch_ratio = self.switch_ratio, #How many atoms will be switched or modified
                                    cutoff = self.cutoff,
                                    elements_lib = self.elements_lib, #elements used to replace the atoms
                                    #MD parameters
@@ -293,7 +248,7 @@ class ParetoLineOptimize(Dynamics):
                                    jumpmax = self.jumpmax,
                                    )
 
-                images[i] = opt.run(bh_steps)
+                images = opt.run(bh_steps)
 
                 #read the dots and geometries obtained from basin hopping
                 dots = read_dots(logfile)
@@ -315,27 +270,10 @@ class ParetoLineOptimize(Dynamics):
                        pareto_line = self.pareto_push(step, i, pareto_line, pareto_atoms, dots[j], traj[j])
                        accepted_numb += 1
                 print "Accepted number", accepted_numb, "dots number", len(dots)
-                accept_ratio[i] = accept_ratio[i] + float(accepted_numb) / float(len(dots))
-                print "Accepted ratio: ", accept_ratio
-                #prob[i] = prob[i] + accepted_numb / len(dots)
-                total_prob = total_prob + accept_ratio[i]
-                print "Total_prob: ", total_prob
             
-            #update base pareto_line after one pareto cycle
             pareto_base = copy.deepcopy(pareto_line)
-            if self.scale:
-               S_factor, E_factor = self.find_scale_factor(pareto_base)
+            S_factor, E_factor = self.find_scale_factor(pareto_base)
 
-            #normalize the total probablility to 1
-            temp = 0.0
-            for i in range (nnode):
-                if total_prob == 0.0:
-                   temp = temp + 1.0/float(nnode)
-                   prob[i] = temp
-                else:
-                   temp = temp + accept_ratio[i] / total_prob 
-                   prob[i] = temp
-            print "Probablility:", prob
         if pareto_atoms is None:
            print "Something wrong on pareto_atoms", type(pareto_atoms)
         else:
@@ -421,6 +359,7 @@ class ParetoLineOptimize(Dynamics):
            elif dot_n[0] < temp[0][0] and dot_n[1] < temp[0][1]:
               pareto_line[0] = dot_n
               pareto_atoms[0] = atom_n
+           
            if pareto_line != temp:
               self.logParetoLine(step, node_numb, pareto_line)
            return pareto_line
@@ -504,8 +443,6 @@ class ParetoLineOptimize(Dynamics):
                pareto_line.insert(index+1, dot_n)
                pareto_atoms.insert(index+1, atom_n)
                self.debug.write('%d  %s  %d\n' % (i, 'inserted',  index+1))
-               if pareto_line != temp:
-                  self.logParetoLine(step, node_numb, pareto_line)
                return pareto_line
             else:
                #For other situations, no acition is needed

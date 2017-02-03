@@ -95,6 +95,7 @@ def read_lammps_trj(filename=None, skip=0, every=1, specorder=None):
     atoms=[]
     f = open(filename, 'r')
     n_atoms = 0
+    count = 0
     while True:
         line = f.readline()
 
@@ -116,8 +117,8 @@ def read_lammps_trj(filename=None, skip=0, every=1, specorder=None):
             line = f.readline()
             n_atoms = int(line.split()[0])
         
-        #read geometries every 'every' step
-        if itrj % every != 0 or itrj < skip:
+        #skip geometries
+        if itrj < skip:
 #           print '%4d is jumped' % itrj
            for i in range(n_atoms + 5):
                line = f.readline()
@@ -166,8 +167,10 @@ def read_lammps_trj(filename=None, skip=0, every=1, specorder=None):
 #               positions_atoms = np.array( [np.dot(np.array(r), rotation_lammps2ase) for r in positions] )
 #               velocities_atoms = np.array( [np.dot(np.array(v), rotation_lammps2ase) for v in velocities] )
 #               forces_atoms = np.array( [np.dot(np.array(f), rotation_lammps2ase) for f in forces] )
-           
-               atoms.append(Atoms(type_atoms, positions=positions_atoms, cell=cell_atoms, pbc=True))
+
+               count += 1
+               if count % every == 0: 
+                  atoms.append(Atoms(type_atoms, positions=positions_atoms, cell=cell_atoms, pbc=True))
 
     f.close()
     return atoms

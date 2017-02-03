@@ -10,6 +10,8 @@ from ase.io.trajectory import PickleTrajectory
 from ase.io.trajectory import Trajectory
 from ase.io import write
 from expectra.md import run_md
+from expectra.switch_elements import switch_elements
+from expectra.lammps_caller import lammps_caller
 import random
 import sys
 import os
@@ -41,7 +43,8 @@ class BasinHopping(Dynamics):
                  #Switch or modify elements in structures
                  move_atoms = True,
                  switch = False,
-                 switch_ratio = 0.1, #percentage of atoms will be used to switch or modified
+                 active_ratio = 0.1, #percentage of atoms will be used to switch or modified
+                 cutoff=None,
                  elements_lib = None, #elements used to replace the atoms
                  #MD parameters
                  md = False,
@@ -52,8 +55,9 @@ class BasinHopping(Dynamics):
                  specorder = None, #for 'lammps', specify the order of species which should be same to that in potential file
                  #Basin Hopping parameters
                  optimizer=FIRE,
+                 bh_energy = False, #if 'true', only do basin_hopping on energy surface
                  adjust_temperature = True,
-                 temp_adjust_fraction = 0.02,
+                 temp_adjust_fraction = 0.05,
                  temperature=100 * kB,
                  fmax=0.1,
                  dr=0.1,
@@ -87,7 +91,6 @@ class BasinHopping(Dynamics):
         self.exafs_calculator = exafs_calculator
 
         if self.opt_calculator == 'lammps':
-           from expectra.lammps_caller import lammps_caller
            print "lammps is true"
            self.lammps = True
         else:
@@ -95,8 +98,9 @@ class BasinHopping(Dynamics):
 
         self.move_atoms = move_atoms   
         self.switch = switch
-        self.switch_ratio = switch_ratio
-        self.switch_space = int(switch_ratio * len(atoms))
+        self.active_ratio = active_ratio
+        self.cutoff = cutoff
+        self.active_space = int(active_ratio * len(atoms))
         self.elements_lib = elements_lib
 
         self.md = md
@@ -106,6 +110,7 @@ class BasinHopping(Dynamics):
         self.md_trajectory = md_trajectory
         self.specorder = specorder
 
+        self.bh_energy = bh_energy
         self.optimizer = optimizer
         self.adjust_temperature = adjust_temperature
         self.temp_adjust_fraction = temp_adjust_fraction
@@ -198,11 +203,16 @@ class BasinHopping(Dynamics):
 
         self.exafs_log = open(self.exafs_logfile, 'w')
         Eo = self.get_energy(ro, symbol_o, -1)
-        chi_o = self.get_chi_deviation(ro, -1)
+
+        if self.exafs_calculator is not None:
+           chi_o = self.get_chi_deviation(ro, -1)
+           Uo = (1.0 - alpha ) * Eo + alpha * scale_ratio * chi_o
+        else:
+           Uo = Eo
+           chi_o = 0.0
         print 'Energy: ', Eo, 'chi_differ: ', chi_o
         print '====================================================================='
-        Uo = (1.0 - alpha ) * Eo + alpha * scale_ratio * chi_o
-        self.log_atoms(-1)
+        self.log_atoms(-1, Uo, chi_o)
         self.log(-1, True, alpha, Eo, self.chi_differ, Uo, Uo)
 
         acceptnum = 0
@@ -214,23 +224,28 @@ class BasinHopping(Dynamics):
             self.chi_differ = []
             while Un is None:
                 if self.switch:
-                   symbol_n = self.switch_elements(symbol_o)
+                   #symbol_n = switch_elements(self.atoms, symbol_o, self.cutoff)
+                   symbol_n = self.random_swap(symbol_o)
                    rn = ro
                 if self.move_atoms:
                    rn = self.move(ro)
                    symbol_n = symbol_o
                 self.time_stamp = strftime("%F %T")
                 En = self.get_energy(rn, symbol_n, step)
-                self.log_atoms(step)
-                chi_n = self.get_chi_deviation(self.atoms.get_positions(), step)
+                if self.exafs_calculator is not None:
+                   chi_n = self.get_chi_deviation(self.atoms.get_positions(), step)
+                   Un =(1 - alpha) * En + alpha * scale_ratio * chi_n
+                else:
+                   Un = En
+                   chi_n = 0.0
+                self.log_atoms(step, Un, chi_n)
                 print 'Energy: ', En, 'chi_differ: ', chi_n
                 print '====================================================================='
-                Un =(1 - alpha) * En + alpha * scale_ratio * chi_n
             if Un < self.Umin:
                 self.Umin = Un
                 self.rmin = self.atoms.get_positions()
-                if not self.switch:
-                   self.call_observers()
+                #if not self.switch:
+                self.call_observers()
                 #record the atoms with minimum U
                 atom_min = self.atoms
 
@@ -244,7 +259,6 @@ class BasinHopping(Dynamics):
             if rejectnum > self.jumpmax and self.jumpmax is not None:
                 accept = True
                 rejectnum = 0
-            print "accept: ", accept
             if accept:
                 print "accepted"
                 acceptnum += 1.
@@ -274,13 +288,13 @@ class BasinHopping(Dynamics):
                        if self.adjust_temperature:
                           self.kT = self.kT * (1 - self.temp_adjust_fraction)
                        if self.switch:
-                          self.switch_ratio = self.switch_ratio * (1-self.adjust_fraction)
+                          self.active_ratio = self.active_ratio * (1-self.adjust_fraction)
                     elif ratio < self.target_ratio:
                         self.dr = self.dr * (1-self.adjust_fraction)
                         if self.adjust_temperature:
                            self.kT = self.kT * (1 + self.temp_adjust_fraction)
                         if self.switch:
-                           self.switch_ratio = self.switch_ratio * (1+self.adjust_fraction)
+                           self.active_ratio = self.active_ratio * (1+self.adjust_fraction)
             self.log(step, accept, alpha, En, self.chi_differ, Un, self.Umin)
 
         return atom_min
@@ -290,13 +304,13 @@ class BasinHopping(Dynamics):
             return
         if step == -1:
            self.logfile.write('#%12s: %s %s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n'
-                               % ("name", "step", "accept", "temperature", "switch_ratio", "alpha", 
+                               % ("name", "step", "accept", "temperature", "active_ratio", "alpha", 
                                   "energy","chi_deviation", "chi", "pseudoPot", "Umin", "time"))
            
         name = self.__class__.__name__
         temp_chi = '   '.join(map(str, chi_differ))
         self.logfile.write('%s: %d  %d  %10.2f %10.2f  %15.6f  %15.6f  %15.6f  %s  %15.6f  %15.6f  %s\n'
-                           % (name, step, accept, self.kT/kB, self.switch_ratio, alpha, 
+                           % (name, step, accept, self.kT/kB, self.active_ratio, alpha, 
                            En, self.chi_deviation, temp_chi, Un, Umin, self.time_stamp))
         self.logfile.flush()
 
@@ -308,9 +322,10 @@ class BasinHopping(Dynamics):
             self.exafs_log.write("%6.3f %16.8e\n" % (k[i], chi[i]))
         self.exafs_log.flush()
 
-    def log_atoms(self,step):
+    def log_atoms(self,step, Un, chi_differ):
         self.log_trajectory.write("%d\n" % (len(self.atoms)))
-        self.log_trajectory.write("node: %s  step: %d\n" %(self.node_numb, step))
+        self.log_trajectory.write("node: %s  step: %d potential: %15.6f chi_differ: %15.6f \n"
+                                  %(self.node_numb, step, Un, chi_differ))
         for atom in self.atoms:
             self.log_trajectory.write("%s  %15.6f  %15.6f  %15.6f\n" % (atom.symbol,
                                      atom.x, atom.y, atom.z))
@@ -319,33 +334,41 @@ class BasinHopping(Dynamics):
     def move(self, ro):
         """Move atoms by a random step."""
         atoms = self.atoms
-        if self.distribution == 'uniform':
-            disp = np.random.uniform(-self.dr, self.dr, (len(atoms), 3))
-        elif self.distribution == 'gaussian':
-            disp = np.random.normal(0,self.dr,size=(len(atoms), 3))
-        elif self.distribution == 'linear':
-            distgeo = self.get_dist_geo_center()
-            disp = np.zeros(np.shape(atoms.get_positions()))
-            for i in range(len(disp)):
-                maxdist = self.dr*distgeo[i]
-            #    disp[i] = np.random.normal(0,maxdist,3)
-                disp[i] = np.random.uniform(-maxdist,maxdist,3)
-        elif self.distribution == 'quadratic':
-            distgeo = self.get_dist_geo_center()
-            disp = np.zeros(np.shape(atoms.get_positions()))
-            for i in range(len(disp)):
-                maxdist = self.dr*distgeo[i]*distgeo[i]
-            #    disp[i] = np.random.normal(0,maxdist,3)
-                disp[i] = np.random.uniform(-maxdist,maxdist,3)
-        else:
-            disp = np.random.uniform(-1*self.dr, self.dr, (len(atoms), 3))
-        #donot move substrate
-        if self.substrate is not None:
-           for i in range(len(atoms)):
-               for j in range(len(self.substrate)):
-                   if i==self.substrate[j]:
-                      disp[i] = (0.0,0.0,0.0)
-
+        disp = np.zeros(np.shape(atoms.get_positions()))
+        while np.alltrue(disp == np.zeros(np.shape(atoms.get_positions()))):
+           if self.distribution == 'uniform':
+               disp = np.random.uniform(-self.dr, self.dr, (len(atoms), 3))
+           elif self.distribution == 'gaussian':
+               disp = np.random.normal(0,self.dr,size=(len(atoms), 3))
+           elif self.distribution == 'linear':
+               distgeo = self.get_dist_geo_center()
+               disp = np.zeros(np.shape(atoms.get_positions()))
+               for i in range(len(disp)):
+                   maxdist = self.dr*distgeo[i]
+               #    disp[i] = np.random.normal(0,maxdist,3)
+                   disp[i] = np.random.uniform(-maxdist,maxdist,3)
+           elif self.distribution == 'quadratic':
+               distgeo = self.get_dist_geo_center()
+               disp = np.zeros(np.shape(atoms.get_positions()))
+               for i in range(len(disp)):
+                   maxdist = self.dr*distgeo[i]*distgeo[i]
+               #    disp[i] = np.random.normal(0,maxdist,3)
+                   disp[i] = np.random.uniform(-maxdist,maxdist,3)
+           else:
+               disp = np.random.uniform(-1*self.dr, self.dr, (len(atoms), 3))
+           
+           #set all other disp to zero except a certain number of disp
+           if self.active_ratio is not None:
+              fix_space = len(atoms) - int(self.active_ratio * len(atoms))
+              fix_atoms = random.sample(range(len(atoms)), fix_space)
+              for i in range(len(fix_atoms)):
+                  disp[fix_atoms[i]] = (0.0, 0.0, 0.0)
+           #donot move substrate
+           if self.substrate is not None:
+              for i in range(len(atoms)):
+                  for j in range(len(self.substrate)):
+                      if i==self.substrate[j]:
+                         disp[i] = (0.0,0.0,0.0)
         if self.significant_structure == True:
             rn = self.local_min_pos + disp
         elif self.significant_structure2 == True:
@@ -366,18 +389,45 @@ class BasinHopping(Dynamics):
         atoms.set_positions(rn)
         return atoms.get_positions()
 
-    def switch_elements(self, symbols):
+    def random_swap(self, symbols):
+
         atoms = self.atoms
         atoms.set_chemical_symbols(symbols)
         elements_lib = self.elements_lib
-        switch_space = int(self.switch_ratio * len(atoms))
+        switch_space = int(self.active_ratio * len(atoms))
         chemical_symbols = atoms.get_chemical_symbols()
-        index=random.sample(xrange(len(atoms)), switch_space)
-        for i in range (switch_space):
-            if chemical_symbols[index[i]] == elements_lib[0]:
-               chemical_symbols[index[i]] = elements_lib[1]
-            else: 
-               chemical_symbols[index[i]] = elements_lib[0]
+        spec_index=[]
+        elements_numb=[]
+        for i in range(len(elements_lib)):
+            spec_index.append([])
+            elements_numb.append(0)
+        for i in xrange(len(atoms)):
+            for j in range (len(elements_lib)):
+                if chemical_symbols[i] == elements_lib[j]:
+                   spec_index[j].append(i)
+                   elements_numb[j] += 1
+
+        print "Elements_numb:", elements_numb
+        if switch_space > min(elements_numb):
+           switch_space = min(elements_numb)
+           
+        index_zero=random.sample(spec_index[0], switch_space)
+        index_one=random.sample(spec_index[1], switch_space)
+        for i in xrange(switch_space):
+            chemical_symbols[index_zero[i]]=elements_lib[1]
+            chemical_symbols[index_one[i]]=elements_lib[0]
+
+        elements_numb=[]
+        for i in range(len(elements_lib)):
+            elements_numb.append(0)
+        for i in xrange(len(atoms)):
+            for j in range (len(elements_lib)):
+                if chemical_symbols[i] == elements_lib[j]:
+                   elements_numb[j] += 1
+        print "Elements_numb after switch:", elements_numb
+
+
+
 #        while (chemical_symbols == symbols):
 #              print "Switching elements"
 #              for i in range (switch_space):

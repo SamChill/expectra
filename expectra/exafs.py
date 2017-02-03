@@ -171,6 +171,9 @@ def exafs_multiple_scattering(S02, energy_shift, absorber,
     k = COMM_WORLD.bcast(k)
     #print "k values:", k
     if chi_total is None:
+        #if k is None:
+        #   chi_total = numpy.zeros(429)
+        #else:
         chi_total = numpy.zeros(len(k))
 
     chi_total = COMM_WORLD.allreduce(chi_total)

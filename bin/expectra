@@ -9,6 +9,7 @@ import numpy
 from expectra.exafs import exafs_first_shell, exafs_multiple_scattering
 from expectra.io import read_xdatcar, read_con
 from ase.io.trajectory import Trajectory
+from expectra.lammps_caller import read_lammps_trj
 from ase.io import read
 
 sys.setrecursionlimit(10000)
@@ -82,7 +83,6 @@ def main():
 #                                       index=slice(args.skip, None, args.every), 
 #                                       format='traj')
             elif filename[-6:] == 'lammps':
-                from expectra.lammps_caller import read_lammps_trj
                 trajectory_part = read_lammps_trj(filename,
                                                   skip = args.skip,
                                                   every = args.every,
