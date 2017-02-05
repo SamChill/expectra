@@ -22,6 +22,8 @@ class ParetoLineOptimize(Dynamics):
                  bh_steps = 10,
                  bh_steps_0 = 10,
                  scale = False,
+                 sample_method = 'boltzmann',
+                 boltzmann_temp = 300 *kB,
                  mini_output = True, #minima output
                  #Modify composition by randomly switching chemical symbol in structures
                  move_atoms = True, #if true, the position of atoms will be modified as normal basin hopping
@@ -86,6 +88,8 @@ class ParetoLineOptimize(Dynamics):
         self.bh_steps = bh_steps
         self.bh_steps_0 = bh_steps_0
         self.scale = scale
+        self.sample_method = sample_method
+        self.boltzmann_temp = boltzmann_temp
 
         self.move_atoms = move_atoms
         self.switch = switch
@@ -142,6 +146,10 @@ class ParetoLineOptimize(Dynamics):
         #self.energy = 1.e32
         self.Umin = 1.e32
         self.rmin = self.atoms.get_positions()
+        self.dots = []
+        self.traj = []
+        self.pareto_atoms = []
+        self.pareto_line = []
         self.debug = open('debug', 'w')
 
 #        self.logfile.write('   name      step accept     energy         chi_difference\n')
@@ -157,8 +165,6 @@ class ParetoLineOptimize(Dynamics):
         prob = []
         accept_ratio = []
         pareto_base = []
-        pareto_line = []
-        pareto_atoms = []
         images = []
         E_factor = None
         S_factor = None
@@ -168,7 +174,7 @@ class ParetoLineOptimize(Dynamics):
             prob.append(interval)
             images.append(None)
         alpha_list.append(1.0)
-
+        
         for step in range(steps):
             total_prob = 0.0
             alpha = []
@@ -193,16 +199,6 @@ class ParetoLineOptimize(Dynamics):
                          scale_ratio = 1.0
                       else:
                          scale_ratio = E_factor/S_factor
-                      for j in range (len(pareto_line)):
-                         U = (1.0-alpha[i]) * (pareto_line[j][0]) + alpha[i] * scale_ratio * pareto_line[j][1]
-                         if j == 0:
-                            Umin = U
-                            atoms = pareto_atoms[0]
-                         elif U < Umin:
-                            Umin = U
-                            atoms = pareto_atoms[j]
-                      #atoms from pareto_atoms has no pbc. This bug is to be fixed
-                      atoms.set_cell([[80,0,0],[0,80,0],[0,0,80]],scale_atoms=False,fix=None)
                 
                 else:     
                    #dynamically select alpha
@@ -210,32 +206,24 @@ class ParetoLineOptimize(Dynamics):
                       index = i
                       atoms = self.atoms
                       scale_ratio = 1.0
-                      alpha.append(np.random.uniform(alpha_list[index], alpha_list[index+1]))
                    else:
                       if not self.scale:
                          scale_ratio = 1.0
-                         index = self.find_alpha(prob)
+                         index = self.sample_index(prob)
                       else:
                          print "Scale ratio is calculated based on the current paretoLine for each paretoCycle"
                          if E_factor is None or S_factor is None:
                             print "E_factor or S_factor is not calculated correctly"
                             break
-                         index = self.find_alpha(prob)
                          scale_ratio = E_factor/S_factor
-                  
-                      alpha.append(np.random.uniform(alpha_list[index], alpha_list[index+1]))
-                      
-                      for j in range (len(pareto_line)):
-                         U = (1.0-alpha[i]) * (pareto_line[j][0]) + alpha[i] * scale_ratio * pareto_line[j][1]
-                         if j == 0:
-                            Umin = U
-                            atoms = pareto_atoms[0]
-                         elif U < Umin:
-                            Umin = U
-                            atoms = pareto_atoms[j]
-                      #atoms from pareto_atoms has no pbc. This bug is to be fixed
-                      atoms.set_cell([[80,0,0],[0,80,0],[0,0,80]],scale_atoms=False,fix=None)
-                     # write("pl_atoms.trj",images=atoms,format="traj")
+                      index = self.sample_index(prob)
+                   alpha.append(np.random.uniform(alpha_list[index], alpha_list[index+1]))
+
+                if step != 0:
+                   if self.sample_method == 'pl_sample':
+                      atoms = self.paretoLine_sample(alpha[i], scale_ratio)
+                   elif self.sample_method == 'boltzmann':
+                      atoms = self.boltzmann_sample(alpha[i], scale_ratio)
                     
                 print "BasinHopping cycle ", i, "alpha:", alpha[i] 
                 #run BasinHopping
@@ -304,15 +292,15 @@ class ParetoLineOptimize(Dynamics):
                 #initialize pareto line
                 if step == 0 and i == 0:
                    pareto_base.append(dots[0])
-                   pareto_line = copy.deepcopy(pareto_base)
-                   pareto_atoms.append(traj[0])
+                   self.pareto_line = copy.deepcopy(pareto_base)
+                   self.pareto_atoms.append(traj[0])
 
                 #pick out the dots which can push pareto line
                 accepted_numb = 0
                 for j in xrange (len(dots)):
                     promoter = self.dots_filter(pareto_base, dots[j])
                     if promoter:
-                       pareto_line = self.pareto_push(step, i, pareto_line, pareto_atoms, dots[j], traj[j])
+                       self.pareto_push(step, i, dots[j], traj[j])
                        accepted_numb += 1
                 print "Accepted number", accepted_numb, "dots number", len(dots)
                 accept_ratio[i] = accept_ratio[i] + float(accepted_numb) / float(len(dots))
@@ -320,11 +308,15 @@ class ParetoLineOptimize(Dynamics):
                 #prob[i] = prob[i] + accepted_numb / len(dots)
                 total_prob = total_prob + accept_ratio[i]
                 print "Total_prob: ", total_prob
-            
+                
+                #store all the dots and images for sampling
+                self.dots.extend(dots)
+                self.traj.extend(traj)
+
             #update base pareto_line after one pareto cycle
-            pareto_base = copy.deepcopy(pareto_line)
+            pareto_base = copy.deepcopy(self.pareto_line)
             if self.scale:
-               S_factor, E_factor = self.find_scale_factor(pareto_base)
+               S_factor, E_factor = self.find_scale_factor()
 
             #normalize the total probablility to 1
             temp = 0.0
@@ -336,13 +328,13 @@ class ParetoLineOptimize(Dynamics):
                    temp = temp + accept_ratio[i] / total_prob 
                    prob[i] = temp
             print "Probablility:", prob
-        if pareto_atoms is None:
-           print "Something wrong on pareto_atoms", type(pareto_atoms)
+        if self.pareto_atoms is None:
+           print "Something wrong on pareto_atoms", type(self.pareto_atoms)
         else:
-           print "tyep of pareto_atoms", type(pareto_atoms[0])
-           print(pareto_atoms[0])
+           print "type of pareto_atoms", type(self.pareto_atoms[0])
+           print(self.pareto_atoms[0])
 
-           write_atoms(self.log_paretoAtoms, pareto_atoms)
+           write_atoms(self.log_paretoAtoms, self.pareto_atoms)
 #        for atoms in pareto_atoms:
 #            self.log_paretoAtoms.write(atoms)
      
@@ -403,33 +395,33 @@ class ParetoLineOptimize(Dynamics):
                continue
         return promoter
 
-    def pareto_push(self, step, node_numb, pareto_line, pareto_atoms, dot_n, atom_n): 
+    def pareto_push(self, step, node_numb, dot_n, atom_n): 
         """
         Parabolic method to determine if accept rn or not
         """
         #only one dot in pareto_line
-        temp = copy.deepcopy(pareto_line)
+        temp = copy.deepcopy(self.pareto_line)
         if len(temp)==1:
            if dot_n[0] < temp[0][0] and dot_n[1] > temp[0][1]:
-              pareto_line[0] = dot_n
-              pareto_line.append(temp[0])
-              pareto_atoms.append(pareto_atoms[0])
-              pareto_atoms[0] = atom_n
+              self.pareto_line[0] = dot_n
+              self.pareto_line.append(temp[0])
+              self.pareto_atoms.append(pareto_atoms[0])
+              self.pareto_atoms[0] = atom_n
            elif dot_n[0] > temp[0][0] and dot_n[1] < temp[0][1]:
-              pareto_line.append(dot_n)
-              pareto_atoms.append(atom_n)
+              self.pareto_line.append(dot_n)
+              self.pareto_atoms.append(atom_n)
            elif dot_n[0] < temp[0][0] and dot_n[1] < temp[0][1]:
-              pareto_line[0] = dot_n
-              pareto_atoms[0] = atom_n
-           if pareto_line != temp:
-              self.logParetoLine(step, node_numb, pareto_line)
-           return pareto_line
+              self.pareto_line[0] = dot_n
+              self.pareto_atoms[0] = atom_n
+           if self.pareto_line != temp:
+              self.logParetoLine(step, node_numb)
+           return 
         
         #more than one dot in pareto_line
         replace = False
         for i in range(0, len(temp)):
             #pareto_line may be changed after each cycle. Need to find new index for element temp[i]
-            index = self.find_index(pareto_line, temp[i])
+            index = self.find_index(temp[i])
 
             #corner situation
             if i == 0:
@@ -444,8 +436,8 @@ class ParetoLineOptimize(Dynamics):
 
                cross_f1 = self.get_cross(dot_c, dot_f1, dot_n)
                if dot_n[0] < dot_b1[0] and cross_f1 < 0:
-                  pareto_line.insert(0, dot_n)
-                  pareto_atoms.insert(0, atom_n)
+                  self.pareto_line.insert(0, dot_n)
+                  self.pareto_atoms.insert(0, atom_n)
                   continue
 
             elif i == len(temp)-2 and i != 0:
@@ -461,14 +453,14 @@ class ParetoLineOptimize(Dynamics):
                cross = self.get_cross(temp[i-1], temp[i], dot_n)
                if dot_n[1] < temp[i][1] and cross > 0 :
                   if replace:
-                     pareto_line.pop(index)
-                     pareto_atoms.pop(index)
+                     self.pareto_line.pop(index)
+                     self.pareto_atoms.pop(index)
                   else:
-                     pareto_line[index] = dot_n
-                     pareto_atoms[index] = atom_n
+                     self.pareto_line[index] = dot_n
+                     self.pareto_atoms[index] = atom_n
                elif dot_n[1] < temp[i][1] and cross < 0:
-                    pareto_line.append(dot_n)
-                    pareto_atoms.append(atom_n)
+                    self.pareto_line.append(dot_n)
+                    self.pareto_atoms.append(atom_n)
                continue
             else:
                dot_b1 = temp[i-1]
@@ -490,32 +482,33 @@ class ParetoLineOptimize(Dynamics):
                   #A previous dot has already been replaced. Discard the current one
                   #'poped' is to record the number of dots poped before current one 
                   #which will change the location of current dot
-                  pareto_line.pop(index)
-                  pareto_atoms.pop(index)
+                  self.pareto_line.pop(index)
+                  self.pareto_atoms.pop(index)
                   self.debug.write('%d  %s  %d\n' % (i, 'poped',  index))
                else:
-                  pareto_line[index] = dot_n
-                  pareto_atoms[index] = atom_n
+                  self.pareto_line[index] = dot_n
+                  self.pareto_atoms[index] = atom_n
                   self.debug.write('%d  %s  %d\n' % (i, 'replaced',  index))
                   replace = True
                continue
             elif cross_b1 < 0  and cross_f1 > 0 and cross_f2 <0:
                #If 'insert' happens, no further action to other dots is needed
-               pareto_line.insert(index+1, dot_n)
-               pareto_atoms.insert(index+1, atom_n)
+               self.pareto_line.insert(index+1, dot_n)
+               self.pareto_atoms.insert(index+1, atom_n)
                self.debug.write('%d  %s  %d\n' % (i, 'inserted',  index+1))
-               if pareto_line != temp:
-                  self.logParetoLine(step, node_numb, pareto_line)
-               return pareto_line
+               if self.pareto_line != temp:
+                  self.logParetoLine(step, node_numb)
+               return 
             else:
                #For other situations, no acition is needed
                self.debug.write('%d  %s  %d\n' % (i, 'nothing done',  index))
                continue
-        if pareto_line != temp:
-           self.logParetoLine(step, node_numb, pareto_line)
-        return pareto_line
+        if self.pareto_line != temp:
+           self.logParetoLine(step, node_numb)
+        return 
     
-    def logParetoLine(self, step, node_numb, pareto_line=[]):
+    def logParetoLine(self, step, node_numb):
+        pareto_line = self.pareto_line
         if self.log_paretoLine is None:
             return
         self.log_paretoLine.write('%s = %d  %s = %d %s = %d\n' % ("step", step, 
@@ -554,8 +547,10 @@ class ParetoLineOptimize(Dynamics):
                return True
         return False
 
-    def find_alpha(self, probability=[]):
+    #select index based on the probablility provided
+    def sample_index(self, probability=[]):
         test_prob = np.random.uniform(0,1)
+        print 'Test prob:', test_prob
         if len(probability) == 1:
            return 0
         if test_prob >= 0.0 and test_prob < probability[0]:
@@ -564,12 +559,12 @@ class ParetoLineOptimize(Dynamics):
            return len(probability)-1
         for i in range(len(probability)-1):
             if test_prob >= probability[i]and probability[i+1] >test_prob:
-               return i
+               return i+1
 
-    def find_index(self, parabola, temp):
+    def find_index(self, temp):
         numb = 0
-        for i in range (len(parabola)):
-            if parabola[i] == temp:
+        for i in range (len(self.pareto_line)):
+            if self.pareto_line[i] == temp:
                index = i
                numb +=1
         if numb > 1:
@@ -646,7 +641,8 @@ class ParetoLineOptimize(Dynamics):
 
         return sorted_dots, alpha_mid
 
-    def find_scale_factor(self, pareto_line):
+    def find_scale_factor(self):
+        pareto_line = self.pareto_line
         if len(pareto_line) == 1:
            S_max = pareto_line[0][1]
            S_min = 0.0
@@ -685,52 +681,38 @@ class ParetoLineOptimize(Dynamics):
         atoms.set_positions(self.rmin)
         return self.Umin, atoms
     
-    """
-    constructure dots in x_E_S space.
-    x is set to 0 so that all the dots in E_S plane
-    """
-    def get_ES_dot(self, positions):
-        self.positions = positions
-        self.atoms.set_positions(positions)
+    def boltzmann_sample(self, alpha, beta):
+        temp = 0.0
+        dots = np.array(self.dots)
+        U = (1.0 - alpha)* dots[:,0] + alpha * beta * dots[:,1] 
+        min_index = np.argmin(U)
+        U = U - U[min_index]
+        p = np.exp(-U/self.boltzmann_temp)
+        p = p /np.sum(p)
+        for i in range(len(p)):
+            temp += p[i]
+            p[i] = temp
+        print "Normalized:"
+        print p
+        index = self.sample_index(p)
+        print 'atom index found: ', index, 'Umin index:', min_index
+        print 'dots selected: ', dots[index]
+        atoms = self.traj[index]
+        atoms.set_cell([[80,0,0],[0,80,0],[0,0,80]],scale_atoms=False,fix=None)
+        return atoms
 
-        En = self.get_energy()
-        if self.single_atom(self.atoms.get_positions()):
-           return None
-        area_diff_n = self.get_area_diff()
-
-        config = [En, area_diff_n]
-
-        return config
-        
-    def get_energy(self):
-        """Return the energy of the nearest local minimum."""
-        #opt_calculator can be any calculator compatible with ASE
-        try:
-            self.atoms.set_calculator(self.opt_calculator)
-            opt = self.optimizer(self.atoms, 
-                                 logfile=self.optimizer_logfile)
-            opt.run(fmax=self.fmax)
-            if self.lm_trajectory is not None:
-                self.lm_trajectory.write(self.atoms)
-
-            energy = self.atoms.get_potential_energy()
-        except:
-            # Something went wrong.
-            # In GPAW the atoms are probably to near to each other.
-            return None
-
-        return energy
-
-    def get_area_diff(self):
-        """Return the area circulated by calculated and
-        experimental curve."""
-        try:
-            self.atoms.set_calculator(self.exafs_calculator)
-            area_diff, self.x_thy, self.y_thy = self.atoms.get_potential_energy()
-        except:
-            # Something went wrong.
-            # In GPAW the atoms are probably to near to each other.
-            return None
-   
-        return area_diff
+    def paretoLine_sample(self, alpha, beta):
+        pareto_line = self.pareto_line 
+        pareto_atoms = self.pareto_atoms
+        for j in range (len(pareto_line)):
+           U = (1.0-alpha) * (pareto_line[j][0]) + alpha * beta * pareto_line[j][1]
+           if j == 0:
+              Umin = U
+              atoms = pareto_atoms[0]
+           elif U < Umin:
+              Umin = U
+              atoms = pareto_atoms[j]
+        #atoms from pareto_atoms has no pbc. This bug is to be fixed
+        atoms.set_cell([[80,0,0],[0,80,0],[0,0,80]],scale_atoms=False,fix=None)
+        return atoms
 

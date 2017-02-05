@@ -390,7 +390,6 @@ class BasinHopping(Dynamics):
         return atoms.get_positions()
 
     def random_swap(self, symbols):
-
         atoms = self.atoms
         atoms.set_chemical_symbols(symbols)
         elements_lib = self.elements_lib
