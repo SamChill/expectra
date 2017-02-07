@@ -1,0 +1,24 @@
+units metal
+atom_style charge
+atom_modify map array sort 0 0.0
+boundary p p p
+
+
+read_data data.lmp.initialize 
+
+
+mass * 1.0 
+pair_style eam
+pair_coeff * * Au_u3.eam
+fix fix_nve all nve 
+thermo_style custom pe pxx 
+variable pxx equal pxx 
+variable pyy equal pyy 
+variable pzz equal pzz 
+variable pxy equal pxy 
+variable pxz equal pxz 
+variable pyz equal pyz 
+variable fx atom fx 
+variable fy atom fy 
+variable fz atom fz 
+variable pe equal pe 

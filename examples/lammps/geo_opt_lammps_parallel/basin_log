@@ -1,0 +1,2 @@
+#        name: step accept  temperature active_ratio        alpha       energy chi_deviation          chi    pseudoPot         Umin         time
+BasinHopping: -1  1      300.00       0.10         0.000000      -188.131530       100.000000        -188.131530      -188.131530  2017-02-07 15:07:09

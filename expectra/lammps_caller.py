@@ -50,7 +50,7 @@ class lammps_caller:
                    print "iteration:", iteration
           f.close()
           atoms = read_lammps_trj(filename=self.trajfile, skip=iteration, specorder=self.specorder)
-          write('lammps_opted.traj',images=atoms[0],format='traj')
+          #write('lammps_opted.traj',images=atoms[0],format='traj')
           return energy, atoms[0]
 
       def run(self, run_type='geo_opt'):

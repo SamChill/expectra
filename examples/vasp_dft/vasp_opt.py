@@ -8,9 +8,7 @@ from ase.io import read
 from ase.units import kB
 from ase.calculators.vasp import Vasp
 from ase.atoms import Atoms
-#from expectra.cal_exafs import Expectra
 from ase.optimize.fire import FIRE
-#from expectra.paretoOPT import ParetoLineOptimize
 from expectra.basin_surface import BasinHopping
 
 def main():
@@ -19,19 +17,6 @@ def main():
     p1.set_cell([[20,0,0],[0,20,0],[0,0,20]],scale_atoms=False,fix=None)
     p1.set_pbc((True, True, True))
 
-
-    """
-    opt_calc = LAMMPS(parameters={
-                                  'pair_style':'meam',
-                                  'pair_coeff':['* * library.meam Au Rh Au-Rh.meam Au Rh'],
-                                  'atom_style':'charge'},
-                      files=potfile,
-                      tmp_dir='/home/leili/tmp',
-                      keep_tmp_files=True,
-                      always_triclinic=False,
-                      specorder=['Au','Rh']
-                      )
-    """
     opt_calc = Vasp(prec = 'Low',
                     ediff = 1e-4,
                     sigma = 0.10,
@@ -46,8 +31,8 @@ def main():
     bh = BasinHopping(atoms = p1,
                       opt_calculator = opt_calc,
                       #uncomment them if want to run md after geometry optimization
-                      md_step = 10,
-                      md = True,
+                      #md_step = 10,
+                      #md = True,
                       optimizer = FIRE
                       )
 

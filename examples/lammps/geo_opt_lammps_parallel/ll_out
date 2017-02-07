@@ -1,0 +1,39 @@
+-catch_rsh /opt/gridengine/default/spool/compute-0-1/active_jobs/9693611.1/pe_hostfile
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+python: no process killed
+lammps is true
+Scale ratio:  1.0
+lammps is running to optimize geometry
+opt_lammps.out
+mpirun -n 24 python lp_opt.py > opt_lammps.out
+energy: -188.131530381
+iteration: 73
+Total energy:  -188.131530381
+--------------------------------------------
+--------------------------------------------
+Energy:  -188.131530381 chi_differ:  0.0
+=====================================================================
+python: no process killed

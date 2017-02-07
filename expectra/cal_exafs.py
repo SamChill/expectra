@@ -233,8 +233,8 @@ class Expectra(Calculator):
         except:
             x_exp, y_exp = load_chi_dat(parameters.exp_file)
 
-        filename2 = 'test_exp_chi.dat'
-        save_result(x_exp, y_exp, filename2)
+        #filename2 = 'test_exp_chi.dat'
+        #save_result(x_exp, y_exp, filename2)
 
         #interpolate chi_exp values based on k values provided in calculated data
         x_exp, y_exp = match_x(x_thy, y_exp, x_exp, xmin, xmax)
@@ -243,14 +243,14 @@ class Expectra(Calculator):
         self.x = x_thy
         self.y = y_thy
 
-        filename2 = 'rescaled_exp_chi.dat'
-        save_result(x_thy, y_thy, filename2)
+        #filename2 = 'rescaled_exp_chi.dat'
+        #save_result(x_thy, y_thy, filename2)
 
-        filename2 = 'rescaled_theory_chi.dat'
-        save_result(x_thy, y_thy, filename2)
+        #filename2 = 'rescaled_theory_chi.dat'
+        #save_result(x_thy, y_thy, filename2)
 
-        filename2 = 'rescaled_exp_chi.dat'
-        save_result(x_exp, y_exp, filename2)
+        #filename2 = 'rescaled_exp_chi.dat'
+        #save_result(x_exp, y_exp, filename2)
 
         if parameters.real_space:
             self.area_diff = calc_area(y_exp, y_thy)

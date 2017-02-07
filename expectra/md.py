@@ -1,5 +1,6 @@
 from ase.md.velocitydistribution import MaxwellBoltzmannDistribution
 from ase.md.verlet import VelocityVerlet
+from ase.md.langevin import Langevin
 from ase.units import kB, fs
 
 def printenergy(a):
@@ -13,9 +14,11 @@ def run_md(atoms=None, md_step=100, temperature = 300 * kB, step_size = 1 * fs, 
     print "Running MD simulation:"
     # Set the momenta corresponding to md_temperature
     MaxwellBoltzmannDistribution(atoms, temperature)
-    # We want to run MD with constant energy using the VelocityVerlet algorithm.
-    dyn = VelocityVerlet(atoms, step_size, 
-                         trajectory=trajectory)
+    # We want to run MD with constant temperature using the Langevin algorithm
+    #dyn = VelocityVerlet(atoms, step_size, 
+    #                     trajectory=trajectory)
+    dyn = Langevin(atoms, step_size, 
+                   temperature, 0.002)
     # Now run the dynamics
     printenergy(atoms)
     for i in range(md_step):

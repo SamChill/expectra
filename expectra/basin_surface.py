@@ -460,19 +460,21 @@ class BasinHopping(Dynamics):
                self.atoms.set_calculator(self.opt_calculator)
                if self.optimizer.__name__ == "FIRE":
                   opt = self.optimizer(self.atoms,
+                                       maxmove = 1.0,
+                                       dt = 0.2, dtmax = 1.0,
                                            logfile=self.optimizer_logfile)
                else:
                   opt = self.optimizer(self.atoms,
                                            logfile=self.optimizer_logfile,
                                            maxstep=self.mss)
+               print "geometry optimization is running"
                opt.run(fmax=self.fmax)
                self.energy = self.atoms.get_potential_energy()
 
-            write('opted.traj',images=self.atoms,format='traj')
-#            write('opted.xyz',images=self.atoms_recording,format='xyz')
+            #write('opted.traj',images=self.atoms,format='traj')
 
-#            if self.lm_trajectory is not None:
-#                self.lm_trajectory.write(self.atoms)
+            #if self.lm_trajectory is not None:
+            #    self.lm_trajectory.write(self.atoms)
                
 
             print 'Total energy: ', self.energy
@@ -485,7 +487,7 @@ class BasinHopping(Dynamics):
                                     specorder = self.specorder)
                   lp.run('md')
                else:
-                  md_trajectory = self.md_trajectory+"_"+str(step)+".traj"
+                  md_trajectory = self.md_trajectory
                   run_md(atoms=self.atoms, 
                          md_step = self.md_step,
                          temperature = self.md_temperature,
@@ -500,7 +502,6 @@ class BasinHopping(Dynamics):
         except:
                 # Something went wrong.
                 # In GPAW the atoms are probably to near to each other.
-            print "Optimizer or MD error"
             return "Optimizer or MD error"
         
         return self.energy
@@ -519,7 +520,8 @@ class BasinHopping(Dynamics):
         if self.lammps:
            md_trajectory = 'trj_lammps'
         else:
-           md_trajectory = self.md_trajectory+"_"+str(step)+".traj"
+           #md_trajectory = self.md_trajectory+"_"+str(step)+".traj"
+           md_trajectory = self.md_trajectory
 
         try: 
             if isinstance(self.exafs_calculator, list):

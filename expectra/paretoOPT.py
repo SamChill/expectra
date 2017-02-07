@@ -405,7 +405,7 @@ class ParetoLineOptimize(Dynamics):
            if dot_n[0] < temp[0][0] and dot_n[1] > temp[0][1]:
               self.pareto_line[0] = dot_n
               self.pareto_line.append(temp[0])
-              self.pareto_atoms.append(pareto_atoms[0])
+              self.pareto_atoms.append(self.pareto_atoms[0])
               self.pareto_atoms[0] = atom_n
            elif dot_n[0] > temp[0][0] and dot_n[1] < temp[0][1]:
               self.pareto_line.append(dot_n)
@@ -686,21 +686,33 @@ class ParetoLineOptimize(Dynamics):
         dots = np.array(self.dots)
         U = (1.0 - alpha)* dots[:,0] + alpha * beta * dots[:,1] 
         min_index = np.argmin(U)
+
+        #avoid overflow in exp
         U = U - U[min_index]
+        U[U < 2**-52] = 0.0 
         p = np.exp(-U/self.boltzmann_temp)
+
+        #avoid underflow in divide
+        p[p < 2**-52] = 0.0 
+        #Normalize probablility
         p = p /np.sum(p)
         for i in range(len(p)):
             temp += p[i]
             p[i] = temp
-        print "Normalized:"
-        print p
+        #print "Normalized:"
+        #print p
         index = self.sample_index(p)
-        print 'atom index found: ', index, 'Umin index:', min_index
-        print 'dots selected: ', dots[index]
+        if self.dots[index] in self.pareto_line:
+           print 'The selected dot is on the pareto line found'
+        print 'The dot selected for bh: ', dots[index]
+        print 'atom index found: ', index, 'away from minimum:', U[index]
         atoms = self.traj[index]
         atoms.set_cell([[80,0,0],[0,80,0],[0,0,80]],scale_atoms=False,fix=None)
         return atoms
-
+    '''
+    def pop_lowProb_dots(self,p):
+        index = [i for i, v in enumerate(p) if p < 2**-52]
+    '''
     def paretoLine_sample(self, alpha, beta):
         pareto_line = self.pareto_line 
         pareto_atoms = self.pareto_atoms

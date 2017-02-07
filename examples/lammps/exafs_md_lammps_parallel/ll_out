@@ -1,0 +1,59 @@
+-catch_rsh /opt/gridengine/default/spool/compute-0-1/active_jobs/9667262.1/pe_hostfile
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+compute-0-1
+python: no process killed
+lammps is true
+Scale ratio:  1.0
+lammps is running to optimize geometry
+opt_lammps.out
+mpirun -n 24 python lp_opt.py > opt_lammps.out
+energy: -188.131530381
+iteration: 73
+Total energy:  -188.131530381
+--------------------------------------------
+MD with lammps is running
+md_lammps.out
+mpirun -n 24 python lp_md.py > md_lammps.out
+--------------------------------------------
+MD trajectories are used
+Expectra parameters:
+    mpirun -n 24 expectra --multiple-scattering --neighbor-cutoff 6.0 --S02 0.89 --energy-shift 3.4 --edge L3 --absorber Au  --specorder 'Au' --skip 10001 --every 20 trj_lammps
+atom reading
+reading trj_lammps
+read    5 configurations from trj_lammps
+[2017-02-07 13:26:56] step 1/5
+[2017-02-07 13:26:59] step 2/5
+[2017-02-07 13:27:00] step 3/5
+[2017-02-07 13:27:01] step 4/5
+[2017-02-07 13:27:03] step 5/5
+saving result to chi.dat
+Compare exafs in real space
+Fourier transformation parameters used:
+    xafsft --kmin 3.0 --kmax 12.0 --kweight 2 --dk 2 --rmin 1.0 --rmax 6.0 --ft-part mag chi.dat
+Warning: number of points in chi_exp and chi_theory is not equal
+area_diff:       14.056069
+Energy:  -188.131530381 chi_differ:  14.056069488
+=====================================================================
+python: no process killed
