@@ -9,6 +9,7 @@ from ase.parallel import world
 from ase.io.trajectory import PickleTrajectory
 from ase.io.trajectory import Trajectory
 from ase.io import write
+from ase.utils.geometry import sort
 from expectra.md import run_md
 from expectra.switch_elements import switch_elements
 from expectra.lammps_caller import lammps_caller
@@ -55,8 +56,7 @@ class BasinHopping(Dynamics):
                  specorder = None, #for 'lammps', specify the order of species which should be same to that in potential file
                  #Basin Hopping parameters
                  optimizer=FIRE,
-                 bh_energy = False, #if 'true', only do basin_hopping on energy surface
-                 adjust_temperature = True,
+                 adjust_temperature = False,
                  temp_adjust_fraction = 0.05,
                  temperature=100 * kB,
                  fmax=0.1,
@@ -73,10 +73,9 @@ class BasinHopping(Dynamics):
                  mss=0.2,
                  minenergy=None,
                  distribution='uniform',
-                 adjust_step= False,
-                 adjust_every = None,
+                 adjust_step_size = None,
                  target_ratio = 0.5,
-                 adjust_fraction = 0.005,
+                 adjust_fraction = 0.05,
                  significant_structure = False,  # displace from minimum at each move
                  significant_structure2 = False, # displace from global minimum found so far at each move
                  pushapart = 0.4,
@@ -110,7 +109,6 @@ class BasinHopping(Dynamics):
         self.md_trajectory = md_trajectory
         self.specorder = specorder
 
-        self.bh_energy = bh_energy
         self.optimizer = optimizer
         self.adjust_temperature = adjust_temperature
         self.temp_adjust_fraction = temp_adjust_fraction
@@ -136,6 +134,8 @@ class BasinHopping(Dynamics):
         self.log_trajectory = self.lm_traject
         if isinstance(local_minima_trajectory, str):
            self.log_trajectory = open(self.log_trajectory, 'w')
+
+        self.atoms_debug = open("atoms_debug.xyz", 'w')
        # if isinstance(local_minima_trajectory, str):
        #     self.lm_trajectory = Trajectory(self.lm_traject,
        #                                           'w', atoms)
@@ -145,8 +145,7 @@ class BasinHopping(Dynamics):
        #                                           'w', atoms)
         self.minenergy = minenergy
         self.distribution = distribution
-        self.adjust_step = adjust_step
-        self.adjust_every = adjust_every
+        self.adjust_step_size = adjust_step_size
         self.target_ratio = target_ratio
         self.adjust_fraction = adjust_fraction
         self.significant_structure = significant_structure
@@ -178,6 +177,7 @@ class BasinHopping(Dynamics):
         self.Umin = 1.e32 
         self.energy = 1.e32
         self.rmin = self.atoms.get_positions()
+        self.local_min_pos = self.atoms.get_positions()
         self.positions = self.atoms.get_positions()
         self.call_observers()
         self.time_stamp=None
@@ -264,8 +264,9 @@ class BasinHopping(Dynamics):
                 acceptnum += 1.
                 recentaccept += 1.
                 rejectnum = 0
-                if self.significant_structure2 == True:
-                    ro = self.local_min_pos.copy()
+                if self.significant_structure == True:
+                    #ro = self.local_min_pos.copy()
+                    ro = self.atoms.get_positions()
                 else:
                     ro = rn.copy()
                     if self.switch:
@@ -278,10 +279,10 @@ class BasinHopping(Dynamics):
             if self.minenergy != None:
                 if Uo < self.minenergy:
                     break
-            if self.adjust_step == True:
-                if step % self.adjust_every == 0:
+            if self.adjust_step_size is not None:
+                if step % self.adjust_step_size == 0:
                     ratio = float(acceptnum)/float(self.steps)
-                    ratio = float(recentaccept)/float(self.adjust_every)
+                    ratio = float(recentaccept)/float(self.adjust_step_size)
                     recentaccept = 0.
                     if ratio > self.target_ratio:
                        self.dr = self.dr * (1+self.adjust_fraction)
@@ -309,9 +310,9 @@ class BasinHopping(Dynamics):
            
         name = self.__class__.__name__
         temp_chi = '   '.join(map(str, chi_differ))
-        self.logfile.write('%s: %d  %d  %10.2f %10.2f  %15.6f  %15.6f  %15.6f  %s  %15.6f  %15.6f  %s\n'
+        self.logfile.write('%s: %d  %d  %10.2f %10.2f  %15.6f  %15.6f  %15.6f  %s  %15.6f  %15.6f %8.4f  %s\n'
                            % (name, step, accept, self.kT/kB, self.active_ratio, alpha, 
-                           En, self.chi_deviation, temp_chi, Un, Umin, self.time_stamp))
+                           En, self.chi_deviation, temp_chi, Un, Umin, self.dr, self.time_stamp))
         self.logfile.flush()
 
     def log_exafs(self, step, absorber):
@@ -330,6 +331,15 @@ class BasinHopping(Dynamics):
             self.log_trajectory.write("%s  %15.6f  %15.6f  %15.6f\n" % (atom.symbol,
                                      atom.x, atom.y, atom.z))
         self.log_trajectory.flush()
+    
+    #log atoms, used for debug
+    def dump_atoms(self,atoms):
+        self.atoms_debug.write("%d\n" % (len(atoms)))
+        self.atoms_debug.write(" \n")
+        for atom in atoms:
+            self.atoms_debug.write("%s  %15.6f  %15.6f  %15.6f\n" % (atom.symbol,
+                                     atom.x, atom.y, atom.z))
+        self.atoms_debug.flush()
 
     def move(self, ro):
         """Move atoms by a random step."""
@@ -369,9 +379,8 @@ class BasinHopping(Dynamics):
                   for j in range(len(self.substrate)):
                       if i==self.substrate[j]:
                          disp[i] = (0.0,0.0,0.0)
-        if self.significant_structure == True:
-            rn = self.local_min_pos + disp
-        elif self.significant_structure2 == True:
+
+        if self.significant_structure2 == True:
             ro,reng = self.get_minimum()
             rn = ro + disp
         else:
@@ -391,9 +400,9 @@ class BasinHopping(Dynamics):
 
     def random_swap(self, symbols):
         atoms = self.atoms
-        atoms.set_chemical_symbols(symbols)
         elements_lib = self.elements_lib
         switch_space = int(self.active_ratio * len(atoms))
+        atoms.set_chemical_symbols(symbols)
         chemical_symbols = atoms.get_chemical_symbols()
         spec_index=[]
         elements_numb=[]
@@ -416,16 +425,14 @@ class BasinHopping(Dynamics):
             chemical_symbols[index_zero[i]]=elements_lib[1]
             chemical_symbols[index_one[i]]=elements_lib[0]
 
-        elements_numb=[]
-        for i in range(len(elements_lib)):
-            elements_numb.append(0)
-        for i in xrange(len(atoms)):
-            for j in range (len(elements_lib)):
-                if chemical_symbols[i] == elements_lib[j]:
-                   elements_numb[j] += 1
-        print "Elements_numb after switch:", elements_numb
-
-
+        #atoms.set_chemical_symbols(chemical_symbols)
+        #print "Elements_numb after switch:", atoms.symbols
+        #counter = 0
+        #for i in range(len(chemical_symbols)):
+        #    if chemical_symbols[i] != symbols[i]:
+        #      counter += 1
+        #print "different atoms:", counter
+        #self.dump_atoms(sort(atoms))
 
 #        while (chemical_symbols == symbols):
 #              print "Switching elements"
@@ -449,6 +456,8 @@ class BasinHopping(Dynamics):
         self.positions = positions
         self.atoms.set_positions(positions)
         self.atoms.set_chemical_symbols(symbols)
+        atoms = self.atoms
+        #self.dump_atoms(sort(atoms))
         try:
             if self.lammps:
                print "lammps is running to optimize geometry"
@@ -471,6 +480,7 @@ class BasinHopping(Dynamics):
                opt.run(fmax=self.fmax)
                self.energy = self.atoms.get_potential_energy()
 
+            self.local_min_pos = self.atoms.get_positions()
             #write('opted.traj',images=self.atoms,format='traj')
 
             #if self.lm_trajectory is not None:
@@ -498,7 +508,6 @@ class BasinHopping(Dynamics):
             
 #            if self.all_local is not None:
 #               self.all_local.write(self.atoms)
-#               self.local_min_pos = self.atoms.get_positions()
         except:
                 # Something went wrong.
                 # In GPAW the atoms are probably to near to each other.

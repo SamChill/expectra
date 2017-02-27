@@ -58,8 +58,7 @@ class ParetoLineOptimize(Dynamics):
                  mss=0.2,
                  minenergy=None,
                  distribution='uniform',
-                 adjust_step=True,
-                 adjust_every = 5,
+                 adjust_step_size=None,
                  target_ratio = 0.5,
                  adjust_fraction = 0.05,
                  significant_structure = False,  # displace from minimum at each move
@@ -129,8 +128,7 @@ class ParetoLineOptimize(Dynamics):
         #                                          'w', atoms)
         self.minenergy = minenergy
         self.distribution = distribution
-        self.adjust_step = adjust_step
-        self.adjust_every = adjust_every
+        self.adjust_step_size = adjust_step_size
         self.adjust_cm = adjust_cm
         self.target_ratio = target_ratio
         self.adjust_fraction = adjust_fraction
@@ -271,7 +269,7 @@ class ParetoLineOptimize(Dynamics):
                                    mss = self.mss,
                                    minenergy = self.minenergy,
                                    distribution = self.distribution,
-                                   adjust_step = self.adjust_step,
+                                   adjust_step_size = self.adjust_step_size,
                                    adjust_every = self.adjust_every,
                                    target_ratio = self.target_ratio,
                                    adjust_fraction = self.adjust_fraction,
@@ -294,6 +292,9 @@ class ParetoLineOptimize(Dynamics):
                    pareto_base.append(dots[0])
                    self.pareto_line = copy.deepcopy(pareto_base)
                    self.pareto_atoms.append(traj[0])
+                else:
+                   dots.pop(0)
+                   traj.pop(0)
 
                 #pick out the dots which can push pareto line
                 accepted_numb = 0
@@ -704,8 +705,8 @@ class ParetoLineOptimize(Dynamics):
         index = self.sample_index(p)
         if self.dots[index] in self.pareto_line:
            print 'The selected dot is on the pareto line found'
-        print 'The dot selected for bh: ', dots[index]
-        print 'atom index found: ', index, 'away from minimum:', U[index]
+        print 'The dot selected for bh: ', dots[index], dots[min_index]
+        print 'atom index found: ', index, 'away from minimum:', min_index,' ', U[index]
         atoms = self.traj[index]
         atoms.set_cell([[80,0,0],[0,80,0],[0,0,80]],scale_atoms=False,fix=None)
         return atoms

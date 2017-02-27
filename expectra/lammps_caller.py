@@ -159,8 +159,13 @@ def read_lammps_trj(filename=None, skip=0, every=1, specorder=None):
            
                cell = [[xhilo,0,0],[0,yhilo,0],[0,0,zhilo]]
            
+               sort_atoms = sorted(zip(id, type, positions, velocities, forces))
+               
                cell_atoms = numpy.array(cell)
-               type_atoms = type
+               type_atoms = [ types for (ids, types, position, velocity, force) in sort_atoms]
+               positions = [ position for (ids, types, position, velocity, force) in sort_atoms]
+               forces = [ force for (ids, types, position, velocity, force) in sort_atoms]
+
                positions_atoms = numpy.array(positions)
                forces_atoms = numpy.array(forces)
            

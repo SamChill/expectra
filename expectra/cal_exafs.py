@@ -27,19 +27,22 @@ def calc_deviation(chi_exp,chi_theory):
     return chi_devi/len(chi_exp)
 
 #Calculate difference between experiment and theory
-def calc_area(y_exp, y_theory, x=None):
+def calc_area(y_exp, y_theory, calc_type='area', average = False):
     if len(y_exp) != len(y_theory):
         print "Warning: number of points in chi_exp and chi_theory is not equal"
         
     numb = min(len(y_exp),len(y_theory))
     area_diff = 0.00
-    if x is not None:
-        for i in range(0, numb):
-            diff = numpy.absolute(y_exp[i] - y_theory[i])
-            area_diff = area_diff + diff * x[i] ** 2
-    else:
-        for i in range(0, numb):
-            area_diff = area_diff + numpy.absolute(y_exp[i] - y_theory[i])
+    for i in range(0, numb):
+      diff = numpy.absolute(y_exp[i] - y_theory[i])
+      #if x is not None:
+      #  area_diff = area_diff + diff * x[i] ** 2
+      if calc_type == 'least_square':
+        area_diff = area_diff + (diff/y_exp[i])**2
+      elif calc_type == 'area':
+        area_diff = area_diff + diff
+    if average:
+       area_diff = area_diff / numb
     print ('%s: %15.6f' % ("area_diff", area_diff))
     return area_diff
 
@@ -99,11 +102,14 @@ class Expectra(Calculator):
         exp_file = 'chi_exp.dat',
         #Following parameters used for xafsft to calculate g_r plot
         real_space = True,
+        calc_type = 'area',
+        average = False, #if true, the curve difference will be averaged by the number of dots
         kweight= 2,
         dk = 1.0,
         rmin = 2.0,
         rmax = 6.0,
-        ft_part = 'mag')
+        ft_part = 'mag',
+        debug = False)
     """
     set multiple_scattering = '--multiple-scattering' to enalbe multiple
     scattering calculation. Otherwise first-shell calculation will be
@@ -243,16 +249,15 @@ class Expectra(Calculator):
         self.x = x_thy
         self.y = y_thy
 
-        #filename2 = 'rescaled_exp_chi.dat'
-        #save_result(x_thy, y_thy, filename2)
-
-        #filename2 = 'rescaled_theory_chi.dat'
-        #save_result(x_thy, y_thy, filename2)
-
-        #filename2 = 'rescaled_exp_chi.dat'
-        #save_result(x_exp, y_exp, filename2)
+        if parameters.debug:
+           filename2 = 'rescaled_theory_chi.dat'
+           save_result(x_thy, y_thy, filename2)
+           
+           filename2 = 'rescaled_exp_chi.dat'
+           save_result(x_exp, y_exp, filename2)
 
         if parameters.real_space:
-            self.area_diff = calc_area(y_exp, y_thy)
+            self.area_diff = calc_area(y_exp, y_thy, calc_type = parameters.calc_type, average = parameters.average)
         else:
-            self.area_diff = calc_area(y_exp, y_thy, x_thy)
+            #need debug
+            self.area_diff = calc_area(y_exp, y_thy)
