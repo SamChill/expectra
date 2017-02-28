@@ -212,7 +212,7 @@ def read_dots(filename):
     return dots
 
 #read atom structures stored by log_atoms in basin hopping
-def read_atoms(filename):
+def read_atoms(filename, state_number = None):
     f = open(filename, 'r')
     atoms=[]
 
@@ -233,7 +233,10 @@ def read_atoms(filename):
         positions = numpy.array(positions)
         atoms.append(Atoms(elements, positions=positions))
     f.close()
-    return atoms
+    if state_number is None
+       return atoms
+    else:
+       return atoms[state_number + 1]
 
 #write a list of atoms with different number of atoms or different elements
 def write_atoms(filename, atoms):
