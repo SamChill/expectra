@@ -11,6 +11,7 @@ from ase.io.trajectory import Trajectory
 from ase.io import write
 from ase.utils.geometry import sort
 from expectra.md import run_md
+from expectra.io import read_atoms
 #from expectra.switch_elements import switch_elements
 from expectra.atoms_operator import rot_match
 from expectra.lammps_caller import lammps_caller
@@ -65,13 +66,13 @@ class BasinHopping(Dynamics):
                  z_min=14.0,
                  substrate = None,
                  absorbate = None,
-                 visited_config = {}, # {'state_number': [energy, chi, repeats], ...}
+                 visited_configs = {}, # {'state_number': [energy, chi, repeats], ...}
                  comp_eps_e = 1.e-4, #criterion to determine if two configurations are identtical in energy 
-                 comp_eps_r = 0.1, #criterion to determine if two configurations are identical in geometry
+                 comp_eps_r = 0.2, #criterion to determine if two configurations are identical in geometry
                  logfile='basin_log', 
                  trajectory='lowest.xyz',
                  optimizer_logfile='-',
-                 local_minima_trajectory='local_minima.xyz',
+                 local_minima_trajectory='localminima.xyz',
                  exafs_logfile = 'exafs.dat',
                  adjust_cm=True,
                  mss=0.2,
@@ -217,6 +218,9 @@ class BasinHopping(Dynamics):
         else:
            Uo = Eo
            chi_o = 0.0
+        repeated, state = self.config_memo(-1)
+        self.visited_configs[state][1] = chi_o
+        self.visited_configs[state][2] = self.chi_differ
         print 'Energy: ', Eo, 'chi_differ: ', chi_o
         print '====================================================================='
         self.log_atoms(-1, Uo, chi_o)
@@ -241,10 +245,12 @@ class BasinHopping(Dynamics):
                 En = self.get_energy(rn, symbol_n, step)
                 #check if the new configuration was visited
                 repeated, state = self.config_memo(step)
+                print "repeated:", repeated
                 if self.exafs_calculator is not None:
                    if not repeated:
                       chi_n = self.get_chi_deviation(self.atoms.get_positions(), step)
                       self.visited_configs[state][1] = chi_n
+                      self.visited_configs[state][2] = self.chi_differ
                       Un =(1 - alpha) * En + alpha * scale_ratio * chi_n
                    else:
                       chi_n = self.chi_deviation
@@ -470,7 +476,8 @@ class BasinHopping(Dynamics):
         """
         lm_trajectory = self.lm_traject.split('_')
         repeated = False
-        if not self.visited_configs:
+        #print "visited_configs:",self.visited_configs
+        if self.visited_configs:
            for state in self.visited_configs:
                if abs(self.energy - self.visited_configs[state][0]) < self.comp_eps_e:
                   state_list = state.split('_')
@@ -480,26 +487,26 @@ class BasinHopping(Dynamics):
                   else:
                      traj_file = lm_trajectory[0] +'_'+ state_list[0] + '_'+ state_list[1]
                      config_number = int(state_list[2])
-                  
                   config_o = read_atoms(traj_file, config_number)
                   config_o.set_cell(self.atoms.get_cell())
-
+                  #print "rot match or not:", rot_match(config_o, self.atoms, self.comp_eps_r)
                   if rot_match(config_o, self.atoms, self.comp_eps_r):
-                     print "Found a repeat of state %s:", state
+                     print "Found a repeat of state:", state
                      repeated = True
-                     self.visited_configs[state][2] += 1
+                     self.visited_configs[state][3] += 1
                      self.chi_deviation = self.visited_configs[state][1]
+                     self.chi_differ = self.visited_configs[state][2]
                      return repeated, state
 
-         #a new state is found or visited_configs is empty
-         #Note: chi_deviation is not calculated yet
-         if not repeated:
-            if len(lm_trajectory) == 1:
-               new_state = str(step)
-            else:
-               new_state = lm_trajectory[1] + '_' + lm_trajectory[2] + '_' + str(step)
-            self.visited_configs[new_state] = [self.energy, 0.0, 1]
-         return repeated, new_state
+        #a new state is found or visited_configs is empty
+        #Note: chi_deviation is not calculated yet
+        if not repeated:
+           if len(lm_trajectory) == 1:
+              new_state = str(step)
+           else:
+              new_state = lm_trajectory[1] + '_' + lm_trajectory[2] + '_' + str(step)
+           self.visited_configs[new_state] = [self.energy, 0.0, None, 1]
+        return repeated, new_state
 
     def get_energy(self, positions, symbols, step):
         """Return the energy of the nearest local minimum."""
