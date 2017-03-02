@@ -233,7 +233,7 @@ def read_atoms(filename, state_number = None):
         positions = numpy.array(positions)
         atoms.append(Atoms(elements, positions=positions))
     f.close()
-    if state_number is None
+    if state_number is None:
        return atoms
     else:
        return atoms[state_number + 1]

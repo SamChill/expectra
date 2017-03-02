@@ -43,6 +43,8 @@ def main():
             default=1.0, help='amplitude reduction factor')
     parser.add_argument('--energy-shift', type=float, metavar='ENERGY', 
             default=0.0, help='energy shift to apply in eV')
+    parser.add_argument('--sig2', type=float, metavar='SIG2', 
+            default=0.0, help='Thermal effect')
     parser.add_argument('--absorber', type=str, metavar='ELEMENT', 
             help='atomic symbol of the xray absorber')
     parser.add_argument('--ignore-elements', type=str, metavar='ELEMENTS',
@@ -127,12 +129,13 @@ def get_default_absorber(atoms, args):
 def exafs_trajectory(args, trajectory):
     if args.multiple_scattering:
         k, chi = exafs_multiple_scattering(args.S02, args.energy_shift, 
-                args.absorber, args.ignore_elements, args.edge, args.rmax, 
+                args.absorber, args.ignore_elements, args.edge, args.rmax,
+                args.sig2,
                 trajectory)
     elif args.first_shell:
         k, chi = exafs_first_shell(args.S02, args.energy_shift, 
                 args.absorber, args.ignore_elements, args.edge, 
-                args.neighbor_cutoff, trajectory)
+                args.neighbor_cutoff, args.sig2, trajectory)
 
     return k, chi
 

@@ -110,6 +110,7 @@ def rot_match(a, b, comp_eps_r):
     tb.set_positions(numpy.dot(tb.get_positions(), R.transpose()))
 
     dist = max(per_atom_norm(ta.get_positions() - tb.get_positions(), ta.get_cell()))
+    print "max differece between two configs:", dist
     return dist < comp_eps_r
 
     ### This gives the RMSD faster, but does not give the optimial rotation

@@ -218,6 +218,7 @@ class BasinHopping(Dynamics):
         else:
            Uo = Eo
            chi_o = 0.0
+           self.chi_differ.append(0.0)
         repeated, state = self.config_memo(-1)
         self.visited_configs[state][1] = chi_o
         self.visited_configs[state][2] = self.chi_differ
@@ -505,8 +506,30 @@ class BasinHopping(Dynamics):
               new_state = str(step)
            else:
               new_state = lm_trajectory[1] + '_' + lm_trajectory[2] + '_' + str(step)
-           self.visited_configs[new_state] = [self.energy, 0.0, None, 1]
+           self.visited_configs[new_state] = [self.energy, 0.0, [0.0], 1]
         return repeated, new_state
+
+    def run_md(atoms=None, md_step=100, step_size = 1 * fs, trajectory=None):
+        print "Running MD simulation:"
+        # Set the momenta corresponding to md_temperature
+        MaxwellBoltzmannDistribution(self.atoms, self.md_temperature)
+        # We want to run MD with constant temperature using the Langevin algorithm
+        #dyn = VelocityVerlet(atoms, step_size, 
+        #                     trajectory=trajectory)
+        traj = io.Trajectory(self.md_trajectory, 'a',
+                             atoms)
+        dyn = Langevin(atoms, step_size, 
+                       temperature, 0.002)
+        log = MDLogger(dyn, atoms, self.md_trajectory,
+                       header=True, stress=False, peratom=False)
+        dyn.attach(log, interval=1)
+        dyn.attach(traj, interval=1)
+        for count in range (md_steps):
+            dyn.run(1)
+            energies.append(self.atoms.get_potential_energy())
+            oldpositions.append(self.atoms.positions.copy())
+        # Reset atoms to minimum point.
+    
 
     def get_energy(self, positions, symbols, step):
         """Return the energy of the nearest local minimum."""

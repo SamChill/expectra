@@ -73,7 +73,7 @@ def exafs_reference_path(z, feff_options):
     return path
 
 def exafs_first_shell(S02, energy_shift, absorber,
-    ignore_elements, edge, neighbor_cutoff, trajectory):
+    ignore_elements, edge, neighbor_cutoff, sig2, trajectory):
     feff_options = {
             'RMAX':str(neighbor_cutoff),
             'HOLE':'%i %.4f' % (feff_edge_number(edge), S02),
@@ -116,7 +116,7 @@ def exafs_first_shell(S02, energy_shift, absorber,
                 r = atoms.get_distance(i,j,True)
                 if r >= neighbor_cutoff: continue
                 interactions += 1
-                k, chi = chi_path(path, r, 0.0, energy_shift, S02, 1)
+                k, chi = chi_path(path, r, sig2, energy_shift, S02, 1)
 
                 if chi_total is not None:
                     chi_total += chi
@@ -129,10 +129,11 @@ def exafs_first_shell(S02, energy_shift, absorber,
     return k, chi_total
 
 def exafs_multiple_scattering(S02, energy_shift, absorber,
-    ignore_elements, edge, rmax, trajectory):
+    ignore_elements, edge, rmax, sig2, trajectory):
     feff_options = {
             'RMAX':str(rmax),
             'HOLE':'%i %.4f' % (feff_edge_number(edge), S02),
+            'SIG2': '%.6f' % (sig2),
             'CORRECTIONS':'%.4f %.4f' % (energy_shift, 0.0),
             'NLEG':'4',
     }
