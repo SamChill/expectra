@@ -1,5 +1,6 @@
 """Following codes are copied and modfied from atom.py in EON"""
 
+import time 
 from math import cos, sin, acos
 import numpy
 
@@ -27,7 +28,7 @@ def per_atom_norm(v, box, ibox = None):
     diff = pbc(v, box, ibox)
     return numpy.sqrt(numpy.sum(diff**2.0, axis=1)) 
 
-def rot_match(a, b, comp_eps_r):
+def rot_match(a, b, comp_eps_r, readtime):
     """
        Following codes are modfied from atom.py in EON
        Determine if Configuration 'a' and 'b' is matching.
@@ -47,6 +48,8 @@ def rot_match(a, b, comp_eps_r):
     
     ta.translate(-acm)
     tb.translate(-bcm)
+
+    starttime = time.time()
 
     #Horn, J. Opt. Soc. Am. A, 1987
     m = numpy.dot(tb.get_positions().transpose(), ta.get_positions())
@@ -110,7 +113,9 @@ def rot_match(a, b, comp_eps_r):
     tb.set_positions(numpy.dot(tb.get_positions(), R.transpose()))
 
     dist = max(per_atom_norm(ta.get_positions() - tb.get_positions(), ta.get_cell()))
-    print "max differece between two configs:", dist
+
+    donetime = time.time()
+    print "max differece between two configs:", dist, readtime, donetime - starttime
     return dist < comp_eps_r
 
     ### This gives the RMSD faster, but does not give the optimial rotation

@@ -215,28 +215,41 @@ def read_dots(filename):
 def read_atoms(filename, state_number = None):
     f = open(filename, 'r')
     atoms=[]
-
+    cycle = -1
     while True:
         elements = []
         positions = []
         line = f.readline()
         if not line:
            break
-        atom_numb = int(line.split()[0])
+        if cycle == -1:
+           atom_numb = int(line.split()[0])
         line = f.readline()
-        for i in range (atom_numb):
-            line = f.readline()
-            fields = line.split()
-            elements.append(fields[0])
-            positions.append( [ float(fields[j+1]) for j in range(3) ] )
-        elements = numpy.array(elements)
-        positions = numpy.array(positions)
-        atoms.append(Atoms(elements, positions=positions))
+        if state_number is not None:
+           if cycle == state_number:
+              for i in range (atom_numb):
+                  line = f.readline()
+                  fields = line.split()
+                  elements.append(fields[0])
+                  positions.append( [ float(fields[j+1]) for j in range(3) ] )
+              elements = numpy.array(elements)
+              positions = numpy.array(positions)
+              return Atoms(elements, positions=positions)
+           else:
+              for i in range (atom_numb):
+                  f.readline()
+        else:
+           for i in range (atom_numb):
+               line = f.readline()
+               fields = line.split()
+               elements.append(fields[0])
+               positions.append( [ float(fields[j+1]) for j in range(3) ] )
+           elements = numpy.array(elements)
+           positions = numpy.array(positions)
+           atoms.append(Atoms(elements, positions=positions))
+        cycle += 1
     f.close()
-    if state_number is None:
-       return atoms
-    else:
-       return atoms[state_number + 1]
+    return atoms
 
 #write a list of atoms with different number of atoms or different elements
 def write_atoms(filename, atoms):
