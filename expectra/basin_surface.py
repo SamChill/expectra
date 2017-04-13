@@ -14,7 +14,7 @@ from ase.utils.geometry import sort
 from expectra.md import run_md
 from expectra.io import read_atoms
 #from expectra.switch_elements import switch_elements
-from expectra.atoms_operator import rot_match
+from expectra.atoms_operator import match
 from expectra.lammps_caller import lammps_caller
 import random
 import sys
@@ -68,6 +68,7 @@ class BasinHopping(Dynamics):
                  z_min=14.0,
                  substrate = None,
                  absorbate = None,
+                 indistinguishable = True,
                  match_structure = False,
                  visited_configs = {}, # {'state_number': [energy, chi, repeats], ...}
                  comp_eps_e = 1.e-4, #criterion to determine if two configurations are identtical in energy 
@@ -111,6 +112,7 @@ class BasinHopping(Dynamics):
         if self.active_ratio is not None:
            self.active_space = int(active_ratio * len(atoms))
         self.elements_lib = elements_lib
+        self.indistinguishable = indistinguishable
         self.match_structure = match_structure
         self.visited_configs = visited_configs # list element: [step, energy, chi_diff, atoms]
         self.comp_eps_e = comp_eps_e
@@ -522,15 +524,18 @@ class BasinHopping(Dynamics):
                   starttime = time.time()
                   config_o = read_atoms(traj_file, config_number)
                   donetime = time.time()
+                  readtime = donetime - starttime
                   config_o.set_cell(self.atoms.get_cell())
+               
                   #print "rot match or not:", rot_match(config_o, self.atoms, self.comp_eps_r)
-                  if rot_match(config_o, self.atoms, self.comp_eps_r, readtime=donetime-starttime):
+                  if match(config_o, self.atoms, self.comp_eps_r, self.indistinguishable):
                      print "Found a repeat of state:", state
                      repeated = True
                      self.visited_configs[state][3] += 1
                      self.chi_deviation = self.visited_configs[state][1]
                      self.chi_differ = self.visited_configs[state][2]
                      return repeated, state
+                  print "max differece between two configs:", dist, readtime, time.time() - donetime
 
         #a new state is found or visited_configs is empty
         #Note: chi_deviation is not calculated yet
@@ -563,6 +568,23 @@ class BasinHopping(Dynamics):
             oldpositions.append(self.atoms.positions.copy())
         # Reset atoms to minimum point.
     
+    def stabilize_structure():
+        atoms_curr = None
+        if atoms_curr is None:
+           run_md(atoms=self.atoms, 
+                  md_step = self.md_step,
+                  temperature = self.md_temperature,
+                  step_size = self.md_step_size,
+                  trajectory = self.md_trajectory)
+           atoms_curr = read_atoms()
+        while not match(atoms_curr, self.atoms, self.comp_eps_r, self.indistinguishable):
+           run_md(atoms=atoms_curr, 
+                  md_step = self.md_step,
+                  temperature = self.md_temperature,
+                  step_size = self.md_step_size,
+                  trajectory = self.md_trajectory)
+           self.atoms = atoms_curr
+        return 
 
     def get_energy(self, positions, symbols, step):
         """Return the energy of the nearest local minimum."""
