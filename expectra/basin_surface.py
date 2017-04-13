@@ -3,6 +3,9 @@ import numpy as np
 
 import time
 #from time import strftime
+from ase.md.velocitydistribution import MaxwellBoltzmannDistribution
+from ase.md.langevin import Langevin
+from ase.md import MDLogger
 from ase.optimize.optimize import Dynamics
 from ase.optimize.fire import FIRE
 from ase.units import kB, fs
@@ -108,7 +111,7 @@ class BasinHopping(Dynamics):
         self.move_atoms = move_atoms   
         self.switch = switch
         self.active_ratio = active_ratio
-        self.cutoff = cutoffa
+        self.cutoff = cutoff
         if self.active_ratio is not None:
            self.active_space = int(active_ratio * len(atoms))
         self.elements_lib = elements_lib
@@ -547,43 +550,47 @@ class BasinHopping(Dynamics):
            self.visited_configs[new_state] = [self.energy, 0.0, [0.0], 1]
         return repeated, new_state
 
-    def run_md(atoms=None, md_step=100, step_size = 1 * fs, trajectory=None):
+    def run_md(self, atoms=None, md_steps=100, step_size = 1 * fs, trajectory=None):
         print "Running MD simulation:"
         # Set the momenta corresponding to md_temperature
-        MaxwellBoltzmannDistribution(self.atoms, self.md_temperature)
+        MaxwellBoltzmannDistribution(atoms=self.atoms, temp=self.md_temperature)
         # We want to run MD with constant temperature using the Langevin algorithm
         #dyn = VelocityVerlet(atoms, step_size, 
         #                     trajectory=trajectory)
-        traj = io.Trajectory(self.md_trajectory, 'a',
-                             atoms)
-        dyn = Langevin(atoms, step_size, 
-                       temperature, 0.002)
-        log = MDLogger(dyn, atoms, self.md_trajectory,
+        traj = Trajectory(self.md_trajectory, 'a',
+                             self.atoms)
+        dyn = Langevin(self.atoms, step_size, 
+                       self.md_temperature, 0.002)
+        log = MDLogger(dyn, self.atoms, 'md.log',
                        header=True, stress=False, peratom=False)
         dyn.attach(log, interval=1)
-        dyn.attach(traj, interval=1)
-        for count in range (md_steps):
-            dyn.run(1)
-            energies.append(self.atoms.get_potential_energy())
-            oldpositions.append(self.atoms.positions.copy())
+        dyn.attach(traj.write, interval=1)
+        #for count in range (md_steps):
+        dyn.run(md_steps)
+        #    print count, self.atoms.get_potential_energy()
+        write('last.traj', self.atoms, format='traj')
+        print self.atoms.get_potential_energy()
         # Reset atoms to minimum point.
     
     def stabilize_structure():
-        atoms_curr = None
-        if atoms_curr is None:
-           run_md(atoms=self.atoms, 
-                  md_step = self.md_step,
-                  temperature = self.md_temperature,
-                  step_size = self.md_step_size,
-                  trajectory = self.md_trajectory)
-           atoms_curr = read_atoms()
-        while not match(atoms_curr, self.atoms, self.comp_eps_r, self.indistinguishable):
-           run_md(atoms=atoms_curr, 
-                  md_step = self.md_step,
-                  temperature = self.md_temperature,
-                  step_size = self.md_step_size,
-                  trajectory = self.md_trajectory)
-           self.atoms = atoms_curr
+        atoms_initial = self.atoms
+        stabilized = False
+        while not stabilized:
+           if self.lammps:
+              md_trajectory = 'trj_lammps'
+              lp =lammps_caller(atoms=self.atoms,
+                                ncore = self.ncore,
+                                specorder = self.specorder)
+              lp.run('md')
+           else:
+              #TODO: update self.atoms by runing MD with MD tools in ase
+              md_trajectory = self.md_trajectory
+              run_md(atoms=self.atoms, 
+                     md_step = self.md_step,
+                     temperature = self.md_temperature,
+                     step_size = self.md_step_size,
+                     trajectory = md_trajectory)
+        stabilized =  match(atoms_curr, self.atoms, self.comp_eps_r, self.indistinguishable)
         return 
 
     def get_energy(self, positions, symbols, step):
