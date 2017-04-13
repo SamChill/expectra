@@ -260,6 +260,8 @@ class BasinHopping(Dynamics):
                 #check if the new configuration was visited
                 if self.match_structure:
                    repeated, state = self.config_memo(step)
+                else:
+                   repeated = False
                 print "repeated:", repeated
                 if self.exafs_calculator is not None:
                    if not repeated:
