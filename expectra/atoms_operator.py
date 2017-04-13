@@ -138,4 +138,179 @@ def rot_match(a, b, comp_eps_r, readtime):
     #rmsd = sqrt((ga + gb - 2*l)/len(a))
     #return rmsd < config.comp_rot_rmsd
 
+def brute_neighbor_list(p, cutoff):
+    nl = []
+    ibox = numpy.linalg.inv(p.box)
+    for a in range(len(p)):
+        nl.append([])
+        for b in range(len(p)):
+            if b != a:
+                dist = numpy.linalg.norm(pbc(p.r[a] - p.r[b], p.box, ibox))
+                if dist < cutoff:
+                    nl[a].append(b)
+    return nl
+
+def sweep_and_prune(p_in, cutoff, strict = True, bc = True):
+    """ Returns a list of nearest neighbors within cutoff for each atom.
+        Parameters:
+            p_in:   Atoms object
+            cutoff: the radius within which two atoms are considered to intersect.
+            strict: perform an actual distance check if True
+            bc:     include neighbors across pbc's """
+    #TODO: Get rid of 'cutoff' and use the covalent bond radii. (Rye can do)
+        # Do we want to use covalent radii? I think the displace class wants to allow for user-defined cutoffs.
+            # We should have both options available. -Rye
+    #TODO: Make work for nonorthogonal boxes.
+    p = p_in.copy()
+    p.r = pbc(p.r, p.box)
+    p.r -= numpy.array([min(p.r[:,0]), min(p.r[:,1]), min(p.r[:,2])])
+    numatoms = len(p)
+    coord_list = []
+    for i in range(numatoms):
+        coord_list.append([i, p.r[i]])
+    for axis in range(3):
+        sorted_axis = sorted(coord_list, key = lambda foo: foo[1][axis])
+        intersect_axis = []
+        for i in range(numatoms):
+            intersect_axis.append([])
+        for i in range(numatoms):
+            done = False
+            j = i + 1
+            if not bc and j >= numatoms:
+                done = True
+            while not done:
+                j = j % numatoms
+                if j == i:
+                    done = True
+                dist = abs(sorted_axis[j][1][axis] - sorted_axis[i][1][axis])
+                if p.box[axis][axis] - sorted_axis[i][1][axis] < cutoff:
+                    dist = min(dist, (p.box[axis][axis] - sorted_axis[i][1][axis]) + sorted_axis[j][1][axis])
+                if dist < cutoff:
+                    intersect_axis[sorted_axis[i][0]].append(sorted_axis[j][0]) 
+                    intersect_axis[sorted_axis[j][0]].append(sorted_axis[i][0]) 
+                    j += 1
+                    if not bc and j >= numatoms:
+                        done = True
+                else:
+                    done = True
+        if axis == 0:
+            intersect = []
+            for i in range(numatoms):
+                intersect.append([])
+                intersect[i] = intersect_axis[i]
+        else:
+            for i in range(numatoms):
+                intersect[i] = list(set(intersect[i]).intersection(intersect_axis[i]))
+    if strict:
+        ibox = numpy.linalg.inv(p.box)
+        for i in range(numatoms):
+            l = intersect[i][:]
+            for j in l:
+                dist = numpy.linalg.norm(pbc(p.r[i] - p.r[j], p.box, ibox))
+                if dist > cutoff:
+                    intersect[i].remove(j)
+                    intersect[j].remove(i)
+    return intersect
+
+def neighbor_list(p, cutoff, brute=False):
+    if brute:
+        nl = brute_neighbor_list(p, cutoff)
+    else:
+        nl = sweep_and_prune(p, cutoff)
+    return nl
+
+def coordination_numbers(p, cutoff, brute=False):
+    """ Returns a list of coordination numbers for each atom in p """
+    nl = neighbor_list(p, cutoff, brute)
+    return [len(l) for l in nl]
+
+import sys
+sys.setrecursionlimit(10000)
+def get_mappings(a, b, eps_r, neighbor_cutoff, mappings = None):
+    """ A recursive depth-first search for a complete set of mappings from atoms
+        in configuration a to atoms in configuration b. Do not use the mappings
+        argument, this is only used internally for recursion.
+
+        Returns None if no mapping was found, or a dictionary mapping atom
+        indices a to atom indices b.
+
+        Note: If a and b are mirror images, this function will still return a
+        mapping from a to b, even though it may not be possible to align them
+        through translation and rotation. """
+    # If this is the top-level user call, create and loop through top-level
+    # mappings.
+    if mappings is None:
+        # Find the least common coordination number in b.
+        bCoordinations = coordination_numbers(b, neighbor_cutoff)
+        bCoordinationsCounts = {}
+        for coordination in bCoordinations:
+            if coordination in bCoordinationsCounts:
+                bCoordinationsCounts[coordination] += 1
+            else:
+                bCoordinationsCounts[coordination] = 1
+        bLeastCommonCoordination = bCoordinationsCounts.keys()[0]
+        for coordination in bCoordinationsCounts.keys():
+            if bCoordinationsCounts[coordination] < bCoordinationsCounts[bLeastCommonCoordination]:
+                bLeastCommonCoordination = coordination
+        # Find one atom in a with the least common coordination number in b.
+        # If it does not exist, return None.
+        aCoordinations = coordination_numbers(a, neighbor_cutoff)
+        try:
+            aAtom = aCoordinations.index(bLeastCommonCoordination)
+        except ValueError:
+            return None
+        # Create a mapping from the atom chosen from a to each of the atoms with
+        # the least common coordination number in b, and recurse.
+        for i in range(len(bCoordinations)):
+            if bCoordinations[i] == bLeastCommonCoordination:
+                # Make sure the element types are the same.
+                if a.names[aAtom] != b.names[i]:
+                    continue
+                mappings = get_mappings(a, b, eps_r, neighbor_cutoff, {aAtom:i})
+                # If the result is not none, then we found a successful mapping.
+                if mappings is not None:
+                    return mappings
+        # There were no mappings.
+        return None
+
+    # This is a recursed invocation of this function.
+    else:
+        # Find an atom from a that has not yet been mapped.
+        unmappedA = 0
+        while unmappedA < len(a):
+            if unmappedA not in mappings.keys():
+                break
+            unmappedA += 1
+        # Calculate the distances from unmappedA to all mapped a atoms.
+        distances = {}
+        for i in mappings.keys():
+            distances[i] = numpy.linalg.norm(pbc(a.r[unmappedA] - a.r[i], a.box))
+        # Loop over each unmapped b atom. Compare the distances between it and
+        # the mapped b atoms to the corresponding distances between unmappedA
+        # and the mapped atoms. If everything is similar, create a new mapping
+        # and recurse.
+        for bAtom in range(len(b)):
+            if bAtom not in mappings.values():
+                for aAtom in distances:
+                    # Break if type check fails.
+                    if b.names[bAtom] != a.names[unmappedA]:
+                        break
+                    # Break if distance check fails
+                    bDist = numpy.linalg.norm(pbc(b.r[bAtom] - b.r[mappings[aAtom]], b.box))
+                    if abs(distances[aAtom] - bDist) > eps_r:
+                        break
+                else:
+                    # All distances were good, so create a new mapping.
+                    newMappings = mappings.copy()
+                    newMappings[unmappedA] = bAtom
+                    # If this is now a complete mapping from a to b, return it.
+                    if len(newMappings) == len(a):
+                        return newMappings
+                    # Otherwise, recurse.
+                    newMappings = get_mappings(a, b, eps_r, neighbor_cutoff, newMappings)
+                    # Pass any successful mapping up the recursion chain.
+                    if newMappings is not None:
+                        return newMappings
+        # There were no mappings.
+        return None 
 
