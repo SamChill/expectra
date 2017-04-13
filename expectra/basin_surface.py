@@ -68,6 +68,7 @@ class BasinHopping(Dynamics):
                  z_min=14.0,
                  substrate = None,
                  absorbate = None,
+                 match_structure = False,
                  visited_configs = {}, # {'state_number': [energy, chi, repeats], ...}
                  comp_eps_e = 1.e-4, #criterion to determine if two configurations are identtical in energy 
                  comp_eps_r = 0.2, #criterion to determine if two configurations are identical in geometry
@@ -109,6 +110,7 @@ class BasinHopping(Dynamics):
         self.cutoff = cutoff
         self.active_space = int(active_ratio * len(atoms))
         self.elements_lib = elements_lib
+        self.match_structure = match_structure
         self.visited_configs = visited_configs # list element: [step, energy, chi_diff, atoms]
         self.comp_eps_e = comp_eps_e
         self.comp_eps_r = comp_eps_r
@@ -226,9 +228,10 @@ class BasinHopping(Dynamics):
            Uo = Eo
            chi_o = 0.0
            self.chi_differ.append(0.0)
-        repeated, state = self.config_memo(-1)
-        self.visited_configs[state][1] = chi_o
-        self.visited_configs[state][2] = self.chi_differ
+        if self.match_structure:
+           repeated, state = self.config_memo(-1)
+           self.visited_configs[state][1] = chi_o
+           self.visited_configs[state][2] = self.chi_differ
         print 'Energy: ', Eo, 'chi_differ: ', chi_o
         print '====================================================================='
 
@@ -255,7 +258,8 @@ class BasinHopping(Dynamics):
                 start_time = time.time()
                 En = self.get_energy(rn, symbol_n, step)
                 #check if the new configuration was visited
-                repeated, state = self.config_memo(step)
+                if self.match_structure:
+                   repeated, state = self.config_memo(step)
                 print "repeated:", repeated
                 if self.exafs_calculator is not None:
                    if not repeated:
