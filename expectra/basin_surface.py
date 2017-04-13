@@ -47,7 +47,7 @@ class BasinHopping(Dynamics):
                  #Switch or modify elements in structures
                  move_atoms = True,
                  switch = False,
-                 active_ratio = 0.1, #percentage of atoms will be used to switch or modified
+                 active_ratio = None, #percentage of atoms will be used to switch or modified
                  cutoff=None,
                  elements_lib = None, #elements used to replace the atoms
                  #MD parameters
@@ -107,8 +107,9 @@ class BasinHopping(Dynamics):
         self.move_atoms = move_atoms   
         self.switch = switch
         self.active_ratio = active_ratio
-        self.cutoff = cutoff
-        self.active_space = int(active_ratio * len(atoms))
+        self.cutoff = cutoffa
+        if self.active_ratio is not None:
+           self.active_space = int(active_ratio * len(atoms))
         self.elements_lib = elements_lib
         self.match_structure = match_structure
         self.visited_configs = visited_configs # list element: [step, energy, chi_diff, atoms]
