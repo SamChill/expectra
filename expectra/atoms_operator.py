@@ -138,18 +138,22 @@ def rot_match(a, b, comp_eps_r, readtime):
     #rmsd = sqrt((ga + gb - 2*l)/len(a))
     #return rmsd < config.comp_rot_rmsd
 
+#Done Conversion
 def brute_neighbor_list(p, cutoff):
     nl = []
-    ibox = numpy.linalg.inv(p.box)
+    ibox = numpy.linalg.inv(p.get_cell())
     for a in range(len(p)):
         nl.append([])
         for b in range(len(p)):
             if b != a:
-                dist = numpy.linalg.norm(pbc(p.r[a] - p.r[b], p.box, ibox))
+                dist = numpy.linalg.norm(pbc(p[a].position - p[b].position, p.get_cell(), ibox))
                 if dist < cutoff:
                     nl[a].append(b)
     return nl
 
+#done conversion: p.r --> p.set_positions or p.get_positions;
+#                 p.box --> p.get_cell()
+#                 p.r[i] --> p[i].position
 def sweep_and_prune(p_in, cutoff, strict = True, bc = True):
     """ Returns a list of nearest neighbors within cutoff for each atom.
         Parameters:
@@ -162,12 +166,13 @@ def sweep_and_prune(p_in, cutoff, strict = True, bc = True):
             # We should have both options available. -Rye
     #TODO: Make work for nonorthogonal boxes.
     p = p_in.copy()
-    p.r = pbc(p.r, p.box)
-    p.r -= numpy.array([min(p.r[:,0]), min(p.r[:,1]), min(p.r[:,2])])
+    p.set_positions(pbc(p.get_positions(), p.get_cell()))
+    positions = p.get_positions()
+    p.set_positions(positions - numpy.array([min(positions[:,0]), min(positions[:,1]), min(positions[:,2])]))
     numatoms = len(p)
     coord_list = []
     for i in range(numatoms):
-        coord_list.append([i, p.r[i]])
+        coord_list.append([i, p[i].position])
     for axis in range(3):
         sorted_axis = sorted(coord_list, key = lambda foo: foo[1][axis])
         intersect_axis = []
@@ -183,8 +188,8 @@ def sweep_and_prune(p_in, cutoff, strict = True, bc = True):
                 if j == i:
                     done = True
                 dist = abs(sorted_axis[j][1][axis] - sorted_axis[i][1][axis])
-                if p.box[axis][axis] - sorted_axis[i][1][axis] < cutoff:
-                    dist = min(dist, (p.box[axis][axis] - sorted_axis[i][1][axis]) + sorted_axis[j][1][axis])
+                if p.get_cell()[axis][axis] - sorted_axis[i][1][axis] < cutoff:
+                    dist = min(dist, (p.get_cell()[axis][axis] - sorted_axis[i][1][axis]) + sorted_axis[j][1][axis])
                 if dist < cutoff:
                     intersect_axis[sorted_axis[i][0]].append(sorted_axis[j][0]) 
                     intersect_axis[sorted_axis[j][0]].append(sorted_axis[i][0]) 
@@ -202,11 +207,11 @@ def sweep_and_prune(p_in, cutoff, strict = True, bc = True):
             for i in range(numatoms):
                 intersect[i] = list(set(intersect[i]).intersection(intersect_axis[i]))
     if strict:
-        ibox = numpy.linalg.inv(p.box)
+        ibox = numpy.linalg.inv(p.get_cell())
         for i in range(numatoms):
             l = intersect[i][:]
             for j in l:
-                dist = numpy.linalg.norm(pbc(p.r[i] - p.r[j], p.box, ibox))
+                dist = numpy.linalg.norm(pbc(p[i].position - p[j].position, p.get_cell(), ibox))
                 if dist > cutoff:
                     intersect[i].remove(j)
                     intersect[j].remove(i)
@@ -224,6 +229,7 @@ def coordination_numbers(p, cutoff, brute=False):
     nl = neighbor_list(p, cutoff, brute)
     return [len(l) for l in nl]
 
+#Done Conversion: a.names[i] --> a[i].symbol
 import sys
 sys.setrecursionlimit(10000)
 def get_mappings(a, b, eps_r, neighbor_cutoff, mappings = None):
@@ -264,7 +270,7 @@ def get_mappings(a, b, eps_r, neighbor_cutoff, mappings = None):
         for i in range(len(bCoordinations)):
             if bCoordinations[i] == bLeastCommonCoordination:
                 # Make sure the element types are the same.
-                if a.names[aAtom] != b.names[i]:
+                if a[aAtom].symbol != b[i].symbol:
                     continue
                 mappings = get_mappings(a, b, eps_r, neighbor_cutoff, {aAtom:i})
                 # If the result is not none, then we found a successful mapping.
@@ -284,7 +290,7 @@ def get_mappings(a, b, eps_r, neighbor_cutoff, mappings = None):
         # Calculate the distances from unmappedA to all mapped a atoms.
         distances = {}
         for i in mappings.keys():
-            distances[i] = numpy.linalg.norm(pbc(a.r[unmappedA] - a.r[i], a.box))
+            distances[i] = numpy.linalg.norm(pbc(a[unmappedA].position - a[i].position, a.get_cell()))
         # Loop over each unmapped b atom. Compare the distances between it and
         # the mapped b atoms to the corresponding distances between unmappedA
         # and the mapped atoms. If everything is similar, create a new mapping
@@ -293,10 +299,10 @@ def get_mappings(a, b, eps_r, neighbor_cutoff, mappings = None):
             if bAtom not in mappings.values():
                 for aAtom in distances:
                     # Break if type check fails.
-                    if b.names[bAtom] != a.names[unmappedA]:
+                    if b[bAtom].symbol != a[unmappedA].symbol:
                         break
                     # Break if distance check fails
-                    bDist = numpy.linalg.norm(pbc(b.r[bAtom] - b.r[mappings[aAtom]], b.box))
+                    bDist = numpy.linalg.norm(pbc(b[bAtom].position - b[mappings[aAtom]].position, b.get_cell()))
                     if abs(distances[aAtom] - bDist) > eps_r:
                         break
                 else:
