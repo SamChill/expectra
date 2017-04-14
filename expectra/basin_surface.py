@@ -57,7 +57,8 @@ class BasinHopping(Dynamics):
                  md = False,
                  md_temperature = 300 * kB,
                  md_step_size = 1 * fs,
-                 md_step = 1000,
+                 md_steps = 1000,
+                 max_md_cycle = 10,
                  md_trajectory = 'md',
                  specorder = None, #for 'lammps', specify the order of species which should be same to that in potential file
                  #Basin Hopping parameters
@@ -124,7 +125,8 @@ class BasinHopping(Dynamics):
         self.md = md
         self.md_temperature = md_temperature
         self.md_step_size = md_step_size
-        self.md_step = md_step
+        self.md_steps = md_steps
+        self.max_md_cycle = max_md_cycle
         self.md_trajectory = md_trajectory
         self.specorder = specorder
 
@@ -271,12 +273,21 @@ class BasinHopping(Dynamics):
                 print "repeated:", repeated
                 if self.exafs_calculator is not None:
                    if not repeated:
-                      chi_n = self.get_chi_deviation(self.atoms.get_positions(), step)
+                      #Calculate exafs for new structure
+                      chi_n, stabilize= self.get_chi_deviation(self.atoms.get_positions(), step)
+                      if not stabilize:
+                         #The new structure can not be stabilized via MD simulation
+                         self.visited_configs[state][1] = None
+                         self.visited_configs[state][2] = None
+                         #self.visited_configs.pop(state)
+                         continue
                       self.visited_configs[state][1] = chi_n
                       self.visited_configs[state][2] = self.chi_differ
                       Un =(1 - alpha) * En + alpha * scale_ratio * chi_n
                    else:
                       chi_n = self.chi_deviation
+                      if chi_n is None:
+                         continue
                       Un =(1 - alpha) * En + alpha * scale_ratio * chi_n
                 else:
                    Un = En
@@ -514,6 +525,7 @@ class BasinHopping(Dynamics):
         repeated = False
         #print "visited_configs:",self.visited_configs
         if self.visited_configs:
+           count = 0
            for state in self.visited_configs:
                if abs(self.energy - self.visited_configs[state][0]) < self.comp_eps_e:
                   state_list = state.split('_')
@@ -527,10 +539,11 @@ class BasinHopping(Dynamics):
                   starttime = time.time()
                   config_o = read_atoms(traj_file, config_number)
                   donetime = time.time()
-                  readtime = donetime - starttime
+                  readtime += (donetime - starttime)
                   config_o.set_cell(self.atoms.get_cell())
                
                   #print "rot match or not:", rot_match(config_o, self.atoms, self.comp_eps_r)
+                  #If the new structure has been visited, read chi data from library
                   if match(config_o, self.atoms, self.comp_eps_r, self.indistinguishable):
                      print "Found a repeat of state:", state
                      repeated = True
@@ -538,7 +551,9 @@ class BasinHopping(Dynamics):
                      self.chi_deviation = self.visited_configs[state][1]
                      self.chi_differ = self.visited_configs[state][2]
                      return repeated, state
-                  print "max differece between two configs:", dist, readtime, time.time() - donetime
+                  matchtime += time.time() - donetime 
+                  count += 1
+           print "readtime:", readtime, "matchtime:", matchtime, "number compared:", count
 
         #a new state is found or visited_configs is empty
         #Note: chi_deviation is not calculated yet
@@ -549,33 +564,42 @@ class BasinHopping(Dynamics):
               new_state = lm_trajectory[1] + '_' + lm_trajectory[2] + '_' + str(step)
            self.visited_configs[new_state] = [self.energy, 0.0, [0.0], 1]
         return repeated, new_state
-
-    def run_md(self, atoms=None, md_steps=100, step_size = 1 * fs, trajectory=None):
+    
+    '''Run md simulation and self.atoms will be automatically updated after each run
+       Trajectory will be stored in the file defined by 'self.md_trajectory'
+    '''
+    def run_md(self, md_steps=100):
         print "Running MD simulation:"
         # Set the momenta corresponding to md_temperature
         MaxwellBoltzmannDistribution(atoms=self.atoms, temp=self.md_temperature)
         # We want to run MD with constant temperature using the Langevin algorithm
         #dyn = VelocityVerlet(atoms, step_size, 
         #                     trajectory=trajectory)
-        traj = Trajectory(self.md_trajectory, 'a',
+        traj = Trajectory(self.md_trajectory, 'w',
                              self.atoms)
-        dyn = Langevin(self.atoms, step_size, 
+        dyn = Langevin(self.atoms, self.step_size, 
                        self.md_temperature, 0.002)
         log = MDLogger(dyn, self.atoms, 'md.log',
-                       header=True, stress=False, peratom=False)
+                       header=True, stress=False, peratom=False,
+                       mode='w')
         dyn.attach(log, interval=1)
         dyn.attach(traj.write, interval=1)
         #for count in range (md_steps):
         dyn.run(md_steps)
         #    print count, self.atoms.get_potential_energy()
-        write('last.traj', self.atoms, format='traj')
-        print self.atoms.get_potential_energy()
+        #write('last.traj', self.atoms, format='traj')
+        #print self.atoms.get_potential_energy()
         # Reset atoms to minimum point.
-    
-    def stabilize_structure():
+
+    '''
+      run MD simulation until the structure is stabilized
+    '''
+    def stabilize_structure(self, max_md_cycle=10):
         atoms_initial = self.atoms
         stabilized = False
-        while not stabilized:
+        md_cycle = 0
+        while not stabilized or md_cycle < max_md_cycle:
+           #TODO: run MD with lammps included in lammps_caller but not ase
            if self.lammps:
               md_trajectory = 'trj_lammps'
               lp =lammps_caller(atoms=self.atoms,
@@ -583,15 +607,11 @@ class BasinHopping(Dynamics):
                                 specorder = self.specorder)
               lp.run('md')
            else:
-              #TODO: update self.atoms by runing MD with MD tools in ase
-              md_trajectory = self.md_trajectory
-              run_md(atoms=self.atoms, 
-                     md_step = self.md_step,
-                     temperature = self.md_temperature,
-                     step_size = self.md_step_size,
-                     trajectory = md_trajectory)
-        stabilized =  match(atoms_curr, self.atoms, self.comp_eps_r, self.indistinguishable)
-        return 
+              run_md(self.md_steps)
+           md_cycle += 1
+           if match(self.atoms, atoms_initial, self.comp_eps_r, self.indistinguishable):
+              stabilized = True
+        return stabilized, md_cycle 
 
     def get_energy(self, positions, symbols, step):
         """Return the energy of the nearest local minimum."""
@@ -655,6 +675,10 @@ class BasinHopping(Dynamics):
 
         try:
             if self.md:
+               stabilize, md_cycle = self.stabilize_structure(self.max_md_cycle)
+               if not stabilize:
+                  return None, stabilize
+            '''
                if self.lammps:
                   md_trajectory = 'trj_lammps'
                   lp =lammps_caller(atoms=self.atoms,
@@ -670,8 +694,9 @@ class BasinHopping(Dynamics):
                          trajectory = md_trajectory)
             
             print '--------------------------------------------'
+            '''
         except:
-            return "MD Error"
+            return "MD Error During EXAFS calculation", False
 
         try: 
             if isinstance(self.exafs_calculator, list):
@@ -705,9 +730,9 @@ class BasinHopping(Dynamics):
         except:
             # Something went wrong.
             # In GPAW the atoms are probably to near to each other.
-            return None
+            return None, False
    
-        return self.chi_deviation
+        return self.chi_deviation, True
 
 
     def push_apart(self,positions):
