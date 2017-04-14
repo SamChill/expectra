@@ -212,21 +212,55 @@ def read_dots(filename):
     return dots
 
 #read atom structures stored by log_atoms in basin hopping
-def read_atoms(filename, state_number = None):
+def read_atoms(filename, state_number = None, mode = None):
     f = open(filename, 'r')
     atoms=[]
     cycle = -1
-    while True:
-        elements = []
-        positions = []
-        line = f.readline()
-        if not line:
-           break
-        if cycle == -1:
-           atom_numb = int(line.split()[0])
-        line = f.readline()
-        if state_number is not None:
-           if cycle == state_number:
+    if mode == 'wholefile':
+       lines = f.readlines()
+       count = 0
+       count_atom = 0
+       elements = []
+       positions = []
+       for line in lines:
+           count += 1
+           if count == 1:
+              atom_numb = int(line.split()[0])
+              continue
+           if count <= (atom_numb+2)*state_number+2:
+              continue
+           fields = line.split()
+           elements.append(fields[0])
+           positions.append( [ float(fields[j+1]) for j in range(3) ] )
+           count_atom += 1
+           if count_atom == atom_numb:
+              elements = numpy.array(elements)
+              positions = numpy.array(positions)
+              return Atoms(elements, positions=positions)
+    else:
+       while True:
+           elements = []
+           positions = []
+           line = f.readline()
+           if not line:
+              break
+           if cycle == -1:
+              atom_numb = int(line.split()[0])
+           line = f.readline()
+           if state_number is not None:
+              if cycle == state_number:
+                 for i in range (atom_numb):
+                     line = f.readline()
+                     fields = line.split()
+                     elements.append(fields[0])
+                     positions.append( [ float(fields[j+1]) for j in range(3) ] )
+                 elements = numpy.array(elements)
+                 positions = numpy.array(positions)
+                 return Atoms(elements, positions=positions)
+              else:
+                 for i in range (atom_numb):
+                     f.readline()
+           else:
               for i in range (atom_numb):
                   line = f.readline()
                   fields = line.split()
@@ -234,20 +268,8 @@ def read_atoms(filename, state_number = None):
                   positions.append( [ float(fields[j+1]) for j in range(3) ] )
               elements = numpy.array(elements)
               positions = numpy.array(positions)
-              return Atoms(elements, positions=positions)
-           else:
-              for i in range (atom_numb):
-                  f.readline()
-        else:
-           for i in range (atom_numb):
-               line = f.readline()
-               fields = line.split()
-               elements.append(fields[0])
-               positions.append( [ float(fields[j+1]) for j in range(3) ] )
-           elements = numpy.array(elements)
-           positions = numpy.array(positions)
-           atoms.append(Atoms(elements, positions=positions))
-        cycle += 1
+              atoms.append(Atoms(elements, positions=positions))
+           cycle += 1
     f.close()
     return atoms
 
