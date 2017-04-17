@@ -288,7 +288,7 @@ def write_atoms(filename, atoms):
 def read_traj(filename, skip = 0, every = 1):
     traj = Trajectory(filename)
     atoms = []
-    for i in range len(traj):
+    for i in range (len(traj)):
         if i < skip:
            continue
         if i % every == 0:
