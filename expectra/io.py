@@ -1,5 +1,6 @@
 from ase import Atoms
 import ase.io
+from ase.io.trajectory import Trajectory
 from ase.constraints import FixAtoms
 import numpy
 
@@ -283,4 +284,16 @@ def write_atoms(filename, atoms):
             f.write("%s  %15.6f  %15.6f  %15.6f\n" % (atom.symbol,
                     atom.x, atom.y, atom.z))
     f.close()
+
+def read_traj(filename, skip = 0, every = 1):
+    traj = Trajectory(filename)
+    atoms = []
+    for i in range len(traj):
+        if i < skip:
+           continue
+        if i % every == 0:
+           atoms.append(traj[i])
+        else:
+           continue
+    return atoms
 
