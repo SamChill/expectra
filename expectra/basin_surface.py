@@ -216,6 +216,7 @@ class BasinHopping(Dynamics):
         self.md_cycle = 0
         self.acceptnumb = 0
         self.recentaccept = 0
+        self.repeated = False
 #        self.log(-1, self.Emin, self.Emin,self.dr)
                 
         #'logfile' is defined in the superclass Dynamics in 'optimize.py'
@@ -252,21 +253,20 @@ class BasinHopping(Dynamics):
            chi_o = 0.0
            self.chi_differ.append(0.0)
         if self.match_structure:
-           repeated, state = self.config_memo(-1)
-           self.visited_configs[state][1] = chi_o
-           self.visited_configs[state][2] = self.chi_differ
+           self.repeated, self.state = self.config_memo(-1)
+           self.visited_configs[self.state][1] = chi_o
+           self.visited_configs[self.state][2] = self.chi_differ
         print 'Energy: ', Eo, 'chi_differ: ', chi_o
         print '====================================================================='
 
         self.time_stamp = time.time() - start_time
         self.log_atoms(-1, Uo, chi_o)
-        self.log(-1, True, state, alpha, Eo, self.chi_differ, Uo, Uo)
+        self.log(-1, True, self.state, alpha, Eo, self.chi_differ, Uo, Uo)
 
         acceptnum = 0
         recentaccept = 0
         rejectnum = 0
         for step in range(steps):
-            md_repeated = False
             Un = None
             self.chi_differ = []
             while Un is None:
@@ -282,43 +282,30 @@ class BasinHopping(Dynamics):
                 En = self.get_energy(rn, symbol_n, step)
                 #check if the new configuration was visited
                 if self.match_structure:
-                   repeated, state = self.config_memo(step)
+                   self.repeated, self.state = self.config_memo(step)
                 else:
-                   repeated = False
-                print "repeated:", repeated
+                   self.repeated = False
+                print "repeated:", self.repeated
                 if self.exafs_calculator is not None:
-                   if not repeated:
+                   if not self.repeated:
                       #Calculate exafs for new structure
                       config_number = len(self.visited_configs) 
                       chi_n, stabilize= self.get_chi_deviation(self.atoms.get_positions(), step)
                       if not stabilize:
-                         #The new structure can not be stabilized via MD simulation
-                         self.visited_configs[state][1] = None
-                         self.visited_configs[state][2] = None
-                         #self.visited_configs.pop(state)
-                         accpet =True
-                         self.acceptnumb += 1.
-                         self.recentaccept += 1.
-                         rejectnum = 0
-                         self.adjust_step(step)
-                         Un = 0  #break while loop
+                         #The new structure can not be stabilized via MD simulation, go back to while loop
+                         #self.visited_configs[state][1] = None
+                         #self.visited_configs[state][2] = None
+                         self.visited_configs.pop(self.state)
                          continue
                       #A repeated structure is found during MD simulation
-                      if str(step) not in self.visited_configs:
-                         md_repeated = True
-                      else:
-                         self.visited_configs[state][1] = chi_n
-                         self.visited_configs[state][2] = self.chi_differ
+                      
+                      self.visited_configs[self.state][1] = chi_n
+                      self.visited_configs[self.state][2] = self.chi_differ
                       Un =(1 - alpha) * En + alpha * scale_ratio * chi_n
                    else:
                       chi_n = self.chi_deviation
                       if chi_n is None:
                          accept =True
-                         self.acceptnumb += 1.
-                         self.recentaccept += 1.
-                         rejectnum = 0
-                         self.adjust_step(step)
-                         Un = 0
                          continue
                       Un =(1 - alpha) * En + alpha * scale_ratio * chi_n
                 else:
@@ -341,13 +328,13 @@ class BasinHopping(Dynamics):
             #take care of overflow problem for exp function
             if Un < Uo:
                accept = True
-            elif repeated or md_repeated:
+            elif self.repeated:
                accept = True
                self.acceptnumb += 1.
                self.recentaccept += 1.
                rejectnum = 0
                self.adjust_step(step)
-               self.log(step, accept, state, alpha, En, self.chi_differ, Un, self.Umin)
+               self.log(step, accept, self.state, alpha, En, self.chi_differ, Un, self.Umin)
                continue
             else:
                accept = np.exp((Uo - Un) / self.kT) > np.random.uniform()
@@ -373,7 +360,7 @@ class BasinHopping(Dynamics):
             else:
                 rejectnum += 1
             self.adjust_step(step)
-            self.log(step, accept, state, alpha, En, self.chi_differ, Un, self.Umin)
+            self.log(step, accept, self.state, alpha, En, self.chi_differ, Un, self.Umin)
 
             if self.minenergy != None:
                 if Uo < self.minenergy:
@@ -413,7 +400,7 @@ class BasinHopping(Dynamics):
         if self.logfile is None:
             return
         if step == -1:
-           self.logfile.write('#%12s: %s %s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n'
+           self.logfile.write('#%10s: %s %s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n'
                                % ("name", "step", "accept", "state", "active_ratio", "alpha", 
                                   "energy","chi_deviation", "chi", "pseudoPot", "Umin", "acc_ratio", "time"))
            
@@ -421,8 +408,8 @@ class BasinHopping(Dynamics):
         temp_chi = '   '.join(map(str, chi_differ))
         #keep En and self.chi_deviation at Column 6 and Column 7 (start from 0).
         #otherwise, need to change read_dots in io.py
-        self.logfile.write('%s: %d  %d  %d %10.2f  %15.6f  %15.6f  %15.6f  %s  %15.6f  %15.6f  %8.4f  %8.4f %d %8.4f %8.4f\n'
-                           % (name, step, accept, int(state), self.active_ratio, alpha, 
+        self.logfile.write('%s: %d  %d  %s %10.2f  %15.6f  %15.6f  %15.6f  %s  %15.6f  %15.6f  %8.4f  %8.4f %d %8.4f %8.4f\n'
+                           % (name, step, accept, state, self.active_ratio, alpha, 
                            En, self.chi_deviation, temp_chi, Un, Umin, self.dr, self.ratio, self.md_cycle, self.md_run_time, self.time_stamp))
         self.logfile.flush()
 
@@ -695,6 +682,7 @@ class BasinHopping(Dynamics):
         md_atoms = []
         print 'stabilizing structure'
         while not stabilized and md_cycle < max_md_cycle:
+           pot_energy_old = self.energy
            atoms_initial = self.atoms.copy()
            md_atoms.append(self.atoms.copy())
            #TODO: run MD with lammps included in lammps_caller but not ase
@@ -706,19 +694,21 @@ class BasinHopping(Dynamics):
               lp.run('md')
            else:
               md_traj, e_log = self.run_md(md_steps=self.md_steps)
-              print self.get_energy()
+              pot_energy=self.get_energy()
+              print pot_energy
            #md_atoms.append(self.atoms.copy())
            md_cycle += 1
-           match_results = match(self.atoms, atoms_initial, self.comp_eps_r, 3.0, self.indistinguishable)
-           if match_results:
-              stabilized = True
-              write(self.md_trajectory, images=md_traj, format='traj')
-              i = 0
-              log_e = open('md.log', 'w')
-              for e in e_log:
-                  log_e.write("%d %15.6f %15.6f\n" %(i, e[0], e[1]))
-                  i+=1
-              log_e.close()
+           if abs(pot_energy - pot_energy_old)<self.comp_eps_e:
+              match_results = match(self.atoms, atoms_initial, self.comp_eps_r, 3.0, self.indistinguishable)
+              if match_results:
+                 stabilized = True
+                 write(self.md_trajectory, images=md_traj, format='traj')
+                 i = 0
+                 log_e = open('md.log', 'w')
+                 for e in e_log:
+                     log_e.write("%d %15.6f %15.6f\n" %(i, e[0], e[1]))
+                     i+=1
+                 log_e.close()
            print 'Stable:', stabilized
         self.dump_atoms(md_atoms,'stabilize_stru.xyz')
         return stabilized, md_cycle 
@@ -795,9 +785,9 @@ class BasinHopping(Dynamics):
                   return None, stabilize
                #The structure converts to a new structure during MD simulation
                #Check if it was visited or not. If visited, pop out the added state
-               if md_cycle > 1:
-                  repeated, state = self.config_memo(step)
-                  if repeated:
+               if md_cycle > 1 and step > -1:
+                  self.repeated, self.state = self.config_memo(step)
+                  if self.repeated:
                      self.visited_configs.pop(str(step))
                      return self.chi_deviation, True
 
