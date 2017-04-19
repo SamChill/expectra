@@ -14,7 +14,6 @@ from ase.io.trajectory import PickleTrajectory
 from ase.io.trajectory import Trajectory
 from ase.io import write
 from ase.utils.geometry import sort
-from expectra.md import run_md
 from expectra.io import read_atoms
 #from expectra.switch_elements import switch_elements
 from expectra.atoms_operator import match
@@ -45,7 +44,7 @@ class BasinHopping(Dynamics):
                  pareto_step = None,
                  node_numb = None,
                  ncore = 2,
-                 opt_calculator = None,
+                 opt_calculator = FIRE,
                  exafs_calculator = None,
                  #Switch or modify elements in structures
                  move_atoms = True,
@@ -65,6 +64,7 @@ class BasinHopping(Dynamics):
                  md_steps = 10000,
                  max_md_cycle = 10,
                  md_trajectory = 'md.traj',
+                 in_memory_mode = True,
                  specorder = None, #for 'lammps', specify the order of species which should be same to that in potential file
                  #Basin Hopping parameters
                  temperature = 300 * kB,
@@ -131,6 +131,7 @@ class BasinHopping(Dynamics):
         self.md_steps = md_steps
         self.max_md_cycle = max_md_cycle
         self.md_trajectory = md_trajectory
+        self.in_memory_mode = in_memory_mode
         self.specorder = specorder
 
         self.optimizer = optimizer
@@ -431,8 +432,8 @@ class BasinHopping(Dynamics):
                                      atom.x, atom.y, atom.z))
         output_atoms.close()
     #log atoms, used for debug
-    def dump_atoms(self,atoms):
-        atoms_debug = open("atoms_debug.xyz", 'w')
+    def dump_atoms(self,atoms, filename):
+        atoms_debug = open(filename, 'w')
         for config in atoms:
             atoms_debug.write("%d\n" % (len(config)))
             atoms_debug.write(" \n")
@@ -619,35 +620,41 @@ class BasinHopping(Dynamics):
         #self.atoms.set_calculator(self.opt_calculator)
         atoms_md = []
         e_log = []
+        atoms_md.append(self.atoms.copy())
         MaxwellBoltzmannDistribution(atoms=self.atoms, temp=self.md_temperature)
         # We want to run MD with constant temperature using the Langevin algorithm
         #dyn = VelocityVerlet(atoms, step_size, 
         #                     trajectory=trajectory)
-       # traj = Trajectory(self.md_trajectory, 'w',
-       #                      self.atoms)
         dyn = Langevin(self.atoms, self.md_step_size, 
                        self.md_temperature, 0.002)
-       # log = MDLogger(dyn, self.atoms, 'md.log',
-       #                header=True, stress=False, peratom=False,
-       #                mode='w')
-       # dyn.attach(log, interval=100)
-       # dyn.attach(traj.write, interval=100)
-        #for count in range (md_steps):
-        #dyn.run(md_steps)
-        #    print count, self.atoms.get_potential_energy()
+        if self.in_memory_mode: 
+           def md_log(atoms=self.atoms):
+               atoms_md.append(atoms.copy())
+               e_log.append([atoms.get_potential_energy(), atoms.get_kinetic_energy()])
+           dyn.attach(md_log, interval=10)    
+           for i in range (md_steps):
+               dyn.run(1)
+           self.dump_atoms(atoms_md, 'md.xyz')
+           log_e = open('md.log', 'w')
+           i = 0
+           for e in e_log:
+               log_e.write("%d %15.6f %15.6f\n" %(i, e[0], e[1]))
+               i+=1
+           log_e.close()
+        else:   
+           traj = Trajectory(self.md_trajectory, 'w',
+                               self.atoms)
+           log = MDLogger(dyn, self.atoms, 'md.log',
+                          header=True, stress=False, peratom=False,
+                          mode='w')
+           dyn.attach(log, interval=1)
+           dyn.attach(traj.write, interval=1)
+           dyn.run(md_steps)
+        #   traj = Trajectory(self.md_trajectory, 'r')
+        #   atoms_md.append(traj[-1])
         #write('last.traj', self.atoms, format='traj')
         #print self.atoms.get_potential_energy()
         # Reset atoms to minimum point.
-        for i in range (md_steps):
-            dyn.run(1)
-            atoms_md.append(self.atoms)
-            e_log.append([self.atoms.get_potential_energy(), self.atoms.get_kinetic_energy()])
-        self.dump_atoms(atoms_md)
-        log_e = open('md.log', 'w')
-        for e in e_log:
-            log_e.write("%d %15.6f %15.6f\n" %(i, e[0], e[1])
-            i+=1
-        log_e.close()
 
     '''
       run MD simulation until the structure is stabilized
@@ -658,8 +665,8 @@ class BasinHopping(Dynamics):
         md_atoms = []
         print 'stabilizing structure'
         while not stabilized and md_cycle < max_md_cycle:
-           atoms_initial = self.atoms
-           md_atoms.append(self.atoms)
+           atoms_initial = self.atoms.copy()
+           md_atoms.append(self.atoms.copy())
            #TODO: run MD with lammps included in lammps_caller but not ase
            if self.lammps:
               md_trajectory = 'trj_lammps'
@@ -669,15 +676,16 @@ class BasinHopping(Dynamics):
               lp.run('md')
            else:
               self.run_md(md_steps=self.md_steps)
+              md_atoms.append(self.atoms.copy())
               print self.get_energy()
+           md_atoms.append(self.atoms.copy())
            md_cycle += 1
            match_results = match(self.atoms, atoms_initial, self.comp_eps_r, 3.0, self.indistinguishable)
-           #print 'match:', match_results
+           print 'match:', match_results
            if match_results:
               stabilized = True
-              print 'Stable:', stabilized
-        self.dump_atoms(md_atoms)
-        print 'atoms logged'
+           print 'Stable:', stabilized
+        self.dump_atoms(md_atoms,'stabilize_stru.xyz')
         return stabilized, md_cycle 
 
     def get_energy(self, positions=None, symbols=None, step=-10):
