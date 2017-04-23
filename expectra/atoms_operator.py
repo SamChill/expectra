@@ -4,6 +4,21 @@ import time
 from math import cos, sin, acos
 import numpy
 
+def single_atom(atoms, rn, cutoff=3.5):
+    """
+    Check if there is single atom in the structure
+    """
+    atoms.set_positions(rn)
+    for i in range (len(atoms)):
+        coordination = 0
+        for j in range (len(atoms)):
+            if j != i:
+               if atoms.get_distance(i,j) < cutoff:
+                  coordination +=1
+        if coordination == 0:
+           return True
+    return False
+
 def pbc(r, box, ibox = None):
     """
     Applies periodic boundary conditions.

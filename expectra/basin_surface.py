@@ -8,6 +8,7 @@ from ase.md.langevin import Langevin
 from ase.md import MDLogger
 from ase.optimize.optimize import Dynamics
 from ase.optimize.fire import FIRE
+from ase.optimize.lbfgs import LBFGS
 from ase.units import kB, fs
 from ase.parallel import world
 from ase.io.trajectory import PickleTrajectory
@@ -16,7 +17,7 @@ from ase.io import write
 from ase.utils.geometry import sort
 from expectra.io import read_atoms
 #from expectra.switch_elements import switch_elements
-from expectra.atoms_operator import match
+from expectra.atoms_operator import match, single_atom
 from expectra.lammps_caller import lammps_caller
 import random
 import sys
@@ -37,9 +38,8 @@ class BasinHopping(Dynamics):
 
     David J. Wales and Harold A. Scheraga, Science, Vol. 285, 1368 (1999)
     """
-
     def __init__(self, atoms,
-                 alpha = 0,
+                 alpha = 0.0,
                  scale_ratio = 1.0,
                  pareto_step = None,
                  node_numb = None,
@@ -78,7 +78,6 @@ class BasinHopping(Dynamics):
                  adjust_temperature = False,
                  temp_adjust_fraction = 0.05,
                  significant_structure = False,  # displace from minimum at each move
-                 significant_structure2 = False, # displace from global minimum found so far at each move
                  pushapart = 0.4,
                  jumpmax=None,
                  substrate = None,
@@ -178,7 +177,6 @@ class BasinHopping(Dynamics):
         self.target_ratio = target_ratio
         self.adjust_fraction = adjust_fraction
         self.significant_structure = significant_structure
-        self.significant_structure2 = significant_structure2
         self.pushapart = pushapart
         self.jumpmax = jumpmax
         self.mss = mss
@@ -266,6 +264,7 @@ class BasinHopping(Dynamics):
         acceptnum = 0
         recentaccept = 0
         rejectnum = 0
+        self.Umin =Uo
         for step in range(steps):
             Un = None
             self.chi_differ = []
@@ -275,11 +274,18 @@ class BasinHopping(Dynamics):
                    symbol_n = self.random_swap(symbol_o)
                    rn = ro
                 if self.move_atoms:
+                   print '==========='
+                   print 'move atoms'
                    rn = self.move(ro)
                    symbol_n = symbol_o
+                   if single_atom(self.atoms, rn):
+                      continue
                 #self.time_stamp = strftime("%F %T")
                 start_time = time.time()
                 En = self.get_energy(rn, symbol_n, step)
+                #if single_atom(self.atoms, rn):
+                #   print 'single atom found'
+                #   continue
                 #check if the new configuration was visited
                 if self.match_structure:
                    self.repeated, self.state = self.config_memo(step)
@@ -296,6 +302,7 @@ class BasinHopping(Dynamics):
                          #self.visited_configs[state][1] = None
                          #self.visited_configs[state][2] = None
                          self.visited_configs.pop(self.state)
+                         print 'the structure is not stabilized. go back to while'
                          continue
                       #A repeated structure is found during MD simulation
                       
@@ -305,6 +312,7 @@ class BasinHopping(Dynamics):
                    else:
                       chi_n = self.chi_deviation
                       if chi_n is None:
+                         print 'none chi_n'
                          accept =True
                          continue
                       Un =(1 - alpha) * En + alpha * scale_ratio * chi_n
@@ -408,9 +416,14 @@ class BasinHopping(Dynamics):
         temp_chi = '   '.join(map(str, chi_differ))
         #keep En and self.chi_deviation at Column 6 and Column 7 (start from 0).
         #otherwise, need to change read_dots in io.py
-        self.logfile.write('%s: %d  %d  %s %10.2f  %15.6f  %15.6f  %15.6f  %s  %15.6f  %15.6f  %8.4f  %8.4f %d %8.4f %8.4f\n'
-                           % (name, step, accept, state, self.active_ratio, alpha, 
-                           En, self.chi_deviation, temp_chi, Un, Umin, self.dr, self.ratio, self.md_cycle, self.md_run_time, self.time_stamp))
+        if self.exafs_calculator is None:
+           self.logfile.write('%s: %d  %d  %s %10.2f  %15.6f  %15.6f  %15.6f  %15.6f  %8.4f  %8.4f %8.4f\n'
+                              % (name, step, accept, state, self.active_ratio, alpha, 
+                              En, Un, Umin, self.dr, self.ratio, self.time_stamp))
+        else:
+           self.logfile.write('%s: %d  %d  %s %10.2f  %15.6f  %15.6f  %15.6f  %s  %15.6f  %15.6f  %8.4f  %8.4f %d %8.4f %8.4f\n'
+                              % (name, step, accept, state, self.active_ratio, alpha, 
+                              En, self.chi_deviation, temp_chi, Un, Umin, self.dr, self.ratio, self.md_cycle, self.md_run_time, self.time_stamp))
         self.logfile.flush()
 
     def log_exafs(self, step, absorber):
@@ -497,11 +510,11 @@ class BasinHopping(Dynamics):
                       if i==self.substrate[j]:
                          disp[i] = (0.0,0.0,0.0)
 
-        if self.significant_structure2 == True:
-            ro,reng = self.get_minimum()
-            rn = ro + disp
-        else:
-            rn = ro + disp
+        #if self.significant_structure2 == True:
+        #    ro,reng = self.get_minimum()
+        #    rn = ro + disp
+        #else:
+        rn = ro + disp
         atoms.set_positions(rn)
         if self.absorbate is not None:
            rn = self.push_to_surface(rn)
@@ -693,9 +706,12 @@ class BasinHopping(Dynamics):
                                 specorder = self.specorder)
               lp.run('md')
            else:
-              md_traj, e_log = self.run_md(md_steps=self.md_steps)
-              pot_energy=self.get_energy()
-              print pot_energy
+              try:
+                 md_traj, e_log = self.run_md(md_steps=self.md_steps)
+                 pot_energy=self.get_energy()
+                 print pot_energy
+              except:
+                 print "MD Error"
            #md_atoms.append(self.atoms.copy())
            md_cycle += 1
            if abs(pot_energy - pot_energy_old)<self.comp_eps_e:
