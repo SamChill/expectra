@@ -12,6 +12,60 @@ from ase.io.trajectory import Trajectory
 from expectra.basin_surface import BasinHopping
 from expectra.io import read_dots, read_atoms, write_atoms
 
+default_parameters=dict(
+             #Switch or modify elements in structures
+             move_atoms = True,
+             switch = False,
+             active_ratio = None, #percentage of atoms will be used to switch or modified
+             cutoff=None,
+             elements_lib = None, #elements used to replace the atoms
+             #Structure optimization
+             optimizer=FIRE,
+             max_optsteps=1000,
+             fmax=0.001,
+             mss=0.2,
+             #MD parameters
+             md = False,
+             md_temperature = 300 * kB,
+             md_step_size = 1 * fs,
+             md_steps = 10000,
+             max_md_cycle = 10,
+             md_trajectory = 'md.traj',
+             md_interval = 10,
+             in_memory_mode = True,
+             specorder = None, #for 'lammps', specify the order of species which should be same to that in potential file
+             #Basin Hopping parameters
+             temperature = 300 * kB,
+             dr=0.5,
+             distribution='uniform',
+             adjust_method = 'local', #method used to adjust dr, available selection: global, local, linear
+             adjust_step_size = None,
+             target_ratio = 0.5,
+             adjust_fraction = 0.05,
+             adjust_temperature = False,
+             temp_adjust_fraction = 0.05,
+             significant_structure = False,  # displace from minimum at each move
+             pushapart = 0.4,
+             jumpmax=None,
+             substrate = None,
+             absorbate = None,
+             z_min=14.0,
+             adjust_cm=True,
+             minenergy=None,
+             #Structure Comparison
+             indistinguishable = True,
+             match_structure = False,
+             visited_configs = {}, # {'state_number': [energy, chi, repeats], ...}
+             comp_eps_e = 1.e-4, #criterion to determine if two configurations are identtical in energy 
+             comp_eps_r = 0.2, #criterion to determine if two configurations are identical in geometry
+             #files logging data
+             logfile='basin_log', 
+             trajectory='lowest.xyz',
+             optimizer_logfile='geo_opt.log',
+             local_minima_trajectory='localminima.xyz',
+             exafs_logfile = 'exafs.dat'
+             )
+
 class ParetoLineOptimize(Dynamics):
 
     def __init__(self, atoms,
@@ -25,59 +79,11 @@ class ParetoLineOptimize(Dynamics):
                  sample_method = 'boltzmann',
                  boltzmann_temp = 300 *kB,
                  mini_output = True, #minima output
-                 #Modify composition by randomly switching chemical symbol in structures
-                 move_atoms = True, #if true, the position of atoms will be modified as normal basin hopping
-                 switch = False,    #if true, the chemical symbols of atoms in the active space (defined by active_ratio) is switchable
-                 active_ratio = 0.1, #percentage of atoms that used to modify composition
-                 cutoff = None,
-                 elements_lib = None, #library of elements where the chemical symbols are picked to modify composition
-                 #MD parameters
-                 md = True,
-                 md_temperature = 300 * kB,
-                 md_step_size = 1 * fs,
-                 md_step = 1000,
-                 md_trajectory = 'md',
-                 specorder=None,
-                 #Basin Hopping parameters
                  alpha = None,
-                 optimizer = FIRE,
-                 temperature=100 * kB,
-                 fmax = 0.1,
-                 dr = 0.1,
-                 z_min = 14.0,
-                 substrate = None,
-                 absorbate = None,
-                 logfile='basin_log', 
-                 trajectory='lowest',
-                 optimizer_logfile='-',
-                 local_minima_trajectory='local_minima.traj',
-                 exafs_logfile = 'exafs',
                  log_paretoLine = 'paretoLine.dat',
-                 log_paretoAtoms = 'paretoAtoms.traj', 
-                 adjust_cm=True,
-                 mss=0.2,
-                 minenergy=None,
-                 distribution='uniform',
-                 adjust_step_size=None,
-                 target_ratio = 0.5,
-                 adjust_fraction = 0.05,
-                 significant_structure = False,  # displace from minimum at each move
-                 significant_structure2 = False, # displace from global minimum found so far at each move
-                 pushapart = 0.4,
-                 jumpmax=None
+                 log_paretoAtoms = 'paretoAtoms.traj',
+                 **kwargs
                  ):
-        """Parameters:
-
-        atoms: Atoms object
-            The Atoms object to operate on.
-
-        trajectory: string
-            Pickle file used to store trajectory of atomic movement.
-
-        logfile: file object or str
-            If *logfile* is a string, a file with that name will be opened.
-            Use '-' for stdout.
-        """
 #       Dynamics.__init__(self, atoms, logfile, trajectory)
         self.atoms = atoms
         self.opt_calculator = opt_calculator
@@ -90,53 +96,21 @@ class ParetoLineOptimize(Dynamics):
         self.sample_method = sample_method
         self.boltzmann_temp = boltzmann_temp
 
-        self.move_atoms = move_atoms
-        self.switch = switch
-        self.active_ratio = active_ratio
-        self.cutoff = cutoff
-        self.elements_lib = elements_lib
- 
-        self.md = md
-        self.md_temperature = md_temperature
-        self.md_step_size = md_step_size
-        self.md_step = md_step
-        self.md_trajectory = md_trajectory
-        self.specorder = specorder
-
         self.alpha = alpha
-        self.optimizer = optimizer
-        self.temperature = temperature
-        self.fmax = fmax
-        self.dr = dr
-        self.z_min = z_min
-        self.substrate = substrate
-        self.absorbate = absorbate
-        self.exafs_logfile = exafs_logfile 
-        self.logfile = logfile 
 
-        self.trajectory = trajectory
-        self.optimizer_logfile = optimizer_logfile
-        self.local_minima_trajectory = local_minima_trajectory
-        self.log_paretoLine = log_paretoLine
-        self.log_paretoAtoms = log_paretoAtoms
+        for parameter in kwargs:
+            if parameter not in default_parameters:
+               print parameter, 'is not in the keywords included'
+               break
+        for (parameter, default) in default_parameters.iteritems():
+            setattr(self, parameter, kwargs.get(parameter, default))
 
-        if isinstance(log_paretoLine, str):
+        if isinstance(self.log_paretoLine, str):
             self.log_paretoLine = open(self.log_paretoLine, 'w')
 
         #if isinstance(log_paretoAtoms, str):
         #    self.log_paretoAtoms = Trajectory(self.log_paretoAtoms,
         #                                          'w', atoms)
-        self.minenergy = minenergy
-        self.distribution = distribution
-        self.adjust_step_size = adjust_step_size
-        self.adjust_cm = adjust_cm
-        self.target_ratio = target_ratio
-        self.adjust_fraction = adjust_fraction
-        self.significant_structure = significant_structure
-        self.significant_structure2 = significant_structure2
-        self.pushapart = pushapart
-        self.jumpmax = jumpmax
-        self.mss = mss
 
         self.initialize()
 
@@ -149,6 +123,9 @@ class ParetoLineOptimize(Dynamics):
         self.pareto_atoms = []
         self.pareto_line = []
         self.debug = open('debug', 'w')
+        self.configs_dir = os.getcwd()+'/configs'
+        self.exafs_dir = os.getcwd()+'/exafs'
+        self.pot_dir = os.getcwd()+'/pot'
 
 #        self.logfile.write('   name      step accept     energy         chi_difference\n')
                 
@@ -240,68 +217,39 @@ class ParetoLineOptimize(Dynamics):
                                    exafs_calculator = self.exafs_calculator,
                                    ncore = self.ncore,
                                    #Switch or modify elements in structures
-                                   move_atoms = self.move_atoms,
-                                   switch = self.switch,
-                                   active_ratio = self.active_ratio, #How many atoms will be switched or modified
-                                   cutoff = self.cutoff,
-                                   elements_lib = self.elements_lib, #elements used to replace the atoms
-                                   #MD parameters
-                                   md = self.md,
-                                   md_temperature = self.md_temperature,
-                                   md_step_size = self.md_step_size,
-                                   md_step = self.md_step,
-                                   md_trajectory = md_trajectory,
-                                   specorder = self.specorder,
-                                   #Basin Hopping parameters
-                                   optimizer = self.optimizer,
-                                   temperature = self.temperature,
-                                   fmax = self.fmax,
-                                   dr = self.dr,
-                                   z_min = self.z_min,
-                                   substrate = self.substrate,
-                                   absorbate = self.absorbate,
                                    logfile = logfile, 
                                    trajectory = trajectory,
-                                   optimizer_logfile = self.optimizer_logfile,
                                    local_minima_trajectory = lm_trajectory,
                                    exafs_logfile = exafs_logfile,
-                                   adjust_cm = self.adjust_cm,
-                                   mss = self.mss,
-                                   minenergy = self.minenergy,
-                                   distribution = self.distribution,
-                                   adjust_step_size = self.adjust_step_size,
-                                   adjust_every = self.adjust_every,
-                                   target_ratio = self.target_ratio,
-                                   adjust_fraction = self.adjust_fraction,
-                                   significant_structure = self.significant_structure,  
-                                   significant_structure2 = self.significant_structure2, 
-                                   pushapart = self.pushapart,
-                                   jumpmax = self.jumpmax,
+                                   visited_configs = self.visited_configs
+                                   **kwargs
                                    )
-
-                images[i] = opt.run(bh_steps)
+                configs_o = self.visited_configs.copy()
+                self.visited_configs.update(opt.run(bh_steps))
+                configs_n = self.differ_configs(configs_o)
 
                 #read the dots and geometries obtained from basin hopping
-                dots = read_dots(logfile)
-                #lowest_traj = Trajectory(trajectory)
-                #images[i] = lowest_traj[-1]
-                traj = read_atoms(lm_trajectory)
+                #dots = read_dots(logfile)
+                #traj = read_atoms(lm_trajectory)
 
                 #initialize pareto line
                 if step == 0 and i == 0:
-                   pareto_base.append(dots[0])
+                   pareto_base.append([configs_n['0_0_-1'][0], configs_n['0_0_-1'][1]])
                    self.pareto_line = copy.deepcopy(pareto_base)
-                   self.pareto_atoms.append(traj[0])
-                else:
-                   dots.pop(0)
-                   traj.pop(0)
+                   self.pareto_atoms.append(configs_n['0_0_-1'][3])
+                #else:
+                #   dots.pop(0)
+                #   traj.pop(0)
 
                 #pick out the dots which can push pareto line
                 accepted_numb = 0
-                for j in xrange (len(dots)):
-                    promoter = self.dots_filter(pareto_base, dots[j])
+                for key in xrange (len(configs_n)):
+                    if key == '0_0_-1':
+                       continue
+                    dot = [configs_n[key][0], configs_n[key][1]]
+                    promoter = self.dots_filter(pareto_base, dot)
                     if promoter:
-                       self.pareto_push(step, i, dots[j], traj[j])
+                       self.pareto_push(step, i, dot, configs_n[key][3])
                        accepted_numb += 1
                 print "Accepted number", accepted_numb, "dots number", len(dots)
                 accept_ratio[i] = accept_ratio[i] + float(accepted_numb) / float(len(dots))
@@ -311,8 +259,8 @@ class ParetoLineOptimize(Dynamics):
                 print "Total_prob: ", total_prob
                 
                 #store all the dots and images for sampling
-                self.dots.extend(dots)
-                self.traj.extend(traj)
+                #self.dots.extend(dots)
+                #self.traj.extend(traj)
 
             #update base pareto_line after one pareto cycle
             pareto_base = copy.deepcopy(self.pareto_line)
@@ -377,7 +325,22 @@ class ParetoLineOptimize(Dynamics):
                    else:
                       alpha[i] = np.random(alpha_list[i], avg_alpha)
     """
-            
+
+    #Find the new structures located
+    def differ_configs(self, configs_o):
+        configs_n = {}
+        for key in self.visited_configs:
+            if key not in configs_o:
+               configs_n[key] = self.visited_configs.get(key)
+               atoms = read_atoms(filename=self.configs_dir+'/'+key)
+               configs_n[key][3]= atoms[0]
+               continue
+            if cmp(self.visited_configs[key], configs_o[key])!=0:
+               configs_n[key] = self.visited_configs.get(key)
+               atoms = read_atoms(filename=self.configs_dir+'/'+key)
+               configs_n[key][3]= atoms[0]
+        return configs_n
+               
     def dots_filter(self, pareto_line, dot):
         #To determine if the dot can push the pareto line.
         temp = copy.deepcopy(pareto_line)
