@@ -2,6 +2,7 @@ import mpi4py.MPI
 import numpy as np
 
 import time
+import errno
 #from time import strftime
 from ase.md.velocitydistribution import MaxwellBoltzmannDistribution
 from ase.md.langevin import Langevin
@@ -79,14 +80,12 @@ default_parameters=dict(
              indistinguishable = True,
              match_structure = False,
              visited_configs = {}, # {'state_number': [energy, chi, repeats], ...}
-             comp_eps_e = 1.e-4, #criterion to determine if two configurations are identtical in energy 
+             comp_eps_e = 1.e-3, #criterion to determine if two configurations are identtical in energy 
              comp_eps_r = 0.2, #criterion to determine if two configurations are identical in geometry
              #files logging data
              logfile='basin_log', 
-             trajectory='lowest.xyz',
+             trajectory='lowest.traj',
              optimizer_logfile='geo_opt.log',
-             local_minima_trajectory='localminima.xyz',
-             exafs_logfile = 'exafs.dat'
              )
 
 class BasinHopping(Dynamics):
@@ -111,8 +110,8 @@ class BasinHopping(Dynamics):
 
         self.alpha = alpha
         self.scale_ratio = scale_ratio
-        self.pareto_step = str(pareto_step)
-        self.node_numb = str(node_numb)
+        self.pareto_step = pareto_step
+        self.node_numb = node_numb
         self.ncore = ncore
         self.opt_calculator = opt_calculator
         self.exafs_calculator = exafs_calculator
@@ -141,10 +140,11 @@ class BasinHopping(Dynamics):
         else:
             self.cm = None
 
-        self.lm_traject = self.local_minima_trajectory
-        self.log_trajectory = self.lm_traject
-        if isinstance(self.local_minima_trajectory, str):
-           self.log_trajectory = open(self.log_trajectory, 'w')
+        #Store the optimized local minima
+        #self.lm_traject = self.local_minima_trajectory
+        #self.log_trajectory = self.lm_traject
+        #if isinstance(self.local_minima_trajectory, str):
+        #   self.log_trajectory = open(self.log_trajectory, 'w')
 
        # if isinstance(local_minima_trajectory, str):
        #     self.lm_trajectory = Trajectory(self.lm_traject,
@@ -195,12 +195,7 @@ class BasinHopping(Dynamics):
         self.recentaccept = 0
         self.repeated = False
 
-#        self.log(-1, self.Emin, self.Emin,self.dr)
-                
         #'logfile' is defined in the superclass Dynamics in 'optimize.py'
-#        self.logfile.write('#%12s: %s %s %21s %21s %21s %21s %21s\n'
-#                            % ("name", "step", "accept", "alpha", "energy",
-#                               "chi_deviation", "pseudoPot", "Umin"))
 
     def run(self, steps):
         """Hop the basins for defined number of steps."""
@@ -208,8 +203,6 @@ class BasinHopping(Dynamics):
         scale_ratio = self.scale_ratio
         atom_min = None
         
-        
-
         print 'Scale ratio: ', scale_ratio
 
         ro = self.atoms.get_positions()
@@ -217,11 +210,12 @@ class BasinHopping(Dynamics):
         #self.time_stamp = strftime("%F %T")
         start_time = time.time()
 
-        self.exafs_log = open(self.exafs_logfile, 'w')
-        Eo = self.get_energy(ro, symbol_o, -1)
+        Eo = self.get_energy(ro, symbol_o)
+        
+        state = '_'.join(filter(None,[self.pareto_step, self.node_numb, str(-1)]))
 
         if self.exafs_calculator is not None:
-           chi_o, stablize = self.get_chi_deviation(ro, -1)
+           chi_o, stablize = self.get_chi_deviation(ro, state)
            print chi_o, stablize
            Uo = (1.0 - alpha ) * Eo + alpha * scale_ratio * chi_o
         else:
@@ -229,14 +223,15 @@ class BasinHopping(Dynamics):
            chi_o = 0.0
            self.chi_differ.append(0.0)
         if self.match_structure:
-           self.repeated, self.state = self.config_memo(-1)
+           self.repeated, self.state = self.config_memo(state)
            self.visited_configs[self.state][1] = chi_o
            self.visited_configs[self.state][2] = self.chi_differ
         print 'Energy: ', Eo, 'chi_differ: ', chi_o
         print '====================================================================='
 
         self.time_stamp = time.time() - start_time
-        self.log_atoms(-1, Uo, chi_o)
+
+        self.log_atoms(state, Uo, chi_o)
         self.log(-1, True, self.state, alpha, Eo, self.chi_differ, Uo, Uo)
 
         acceptnum = 0
@@ -244,8 +239,13 @@ class BasinHopping(Dynamics):
         rejectnum = 0
         self.Umin =Uo
         for step in range(steps):
+            bad_numb = 0
+            bad_configs = []
+            self.md_run_time = 0.0
             Un = None
             self.chi_differ = []
+            state = '_'.join(filter(None,[self.pareto_step, self.node_numb, str(step)]))
+
             while Un is None:
                 if self.switch:
                    #symbol_n = switch_elements(self.atoms, symbol_o, self.cutoff)
@@ -256,17 +256,18 @@ class BasinHopping(Dynamics):
                    print 'move atoms'
                    rn = self.move(ro)
                    symbol_n = symbol_o
-                   if single_atom(self.atoms, rn):
+                   if single_atom(self.atoms, rn, 5.0):
+                      bad_numb += 1
+                      bad_configs.append(self.atoms.set_positions(rn))
+                      if bad_numb > 20:
+                         self.dump_atoms(bad_configs, config_single.xyz)
+                         sys.exit()
                       continue
-                #self.time_stamp = strftime("%F %T")
                 start_time = time.time()
-                En = self.get_energy(rn, symbol_n, step)
-                #if single_atom(self.atoms, rn):
-                #   print 'single atom found'
-                #   continue
+                En = self.get_energy(rn, symbol_n)
                 #check if the new configuration was visited
                 if self.match_structure:
-                   self.repeated, self.state = self.config_memo(step)
+                   self.repeated, self.state = self.config_memo(state)
                 else:
                    self.repeated = False
                 print "repeated:", self.repeated
@@ -274,7 +275,7 @@ class BasinHopping(Dynamics):
                    if not self.repeated:
                       #Calculate exafs for new structure
                       config_number = len(self.visited_configs) 
-                      chi_n, stabilize= self.get_chi_deviation(self.atoms.get_positions(), step)
+                      chi_n, stabilize= self.get_chi_deviation(self.atoms.get_positions(), state)
                       if not stabilize:
                          #The new structure can not be stabilized via MD simulation, go back to while loop
                          #self.visited_configs[state][1] = None
@@ -300,7 +301,7 @@ class BasinHopping(Dynamics):
 
                 self.time_stamp = time.time() - start_time
                 if not self.repeated:
-                   self.log_atoms(step, Un, chi_n)
+                   self.log_atoms(state, Un, chi_n)
                 print 'Energy: ', En, 'chi_differ: ', chi_n
                 print '====================================================================='
             if Un < self.Umin:
@@ -335,7 +336,7 @@ class BasinHopping(Dynamics):
                 self.recentaccept += 1.
                 rejectnum = 0
                 if self.significant_structure == True:
-                    #ro = self.local_min_pos.copy()
+                    #get_positions() return a numpy array
                     ro = self.atoms.get_positions()
                 else:
                     ro = rn.copy()
@@ -364,7 +365,7 @@ class BasinHopping(Dynamics):
                    ratio = self.ratio
                 if self.adjust_method == 'local':
                    ratio = float(self.recentaccept)/float(self.adjust_step_size)
-                   self.recentaccept = 0.
+                   self.recentaccept = 0
 
                 if self.adjust_method == 'linear':
                    self.dr = self.dr * self.ratio/self.target_ratio
@@ -405,45 +406,35 @@ class BasinHopping(Dynamics):
                               En, self.chi_deviation, temp_chi, Un, Umin, self.dr, self.ratio, self.md_cycle, self.md_run_time, self.time_stamp))
         self.logfile.flush()
 
-    def log_exafs(self, step, absorber, chi_deviation):
-        exafs_log = open(sef.exafs_dir+'/'+str(step)+'_'+absorber,'w')
-        exafs_log.write("step: %d absorber: %s energy: %15.6f chi_differ: %15.6f\n" % 
-                        (step, absorber, self.energy, chi_deviation))
+    def log_exafs(self, state, absorber, chi_deviation):
+        exafs_log = open(self.exafs_dir+'/'+state+'_'+absorber,'w')
+        exafs_log.write("state: %s absorber: %s energy: %15.6f chi_differ: %15.6f\n" % 
+                        (state, absorber, self.energy, chi_deviation))
         k = self.k
         chi = self.chi
         for i in xrange(len(k)):
             exafs_log.write("%6.3f %16.8e\n" % (k[i], chi[i]))
         exafs_log.close()
 
-    def log_time(self, step, readtime, matchtime, count):
-        self.time_logger.write("step: %d %15.6f %15.6f %d\n" %
-                                (step, readtime, matchtime, count))
+    def log_time(self, state, readtime, matchtime, count):
+        self.time_logger.write("state: %s %15.6f %15.6f %d\n" %
+                                (state, readtime, matchtime, count))
         self.time_logger.flush() 
-    '''
-    def log_atoms(self,step, Un, chi_differ):
-        self.log_trajectory.write("%d\n" % (len(self.atoms)))
-        print type(Un), type(chi_differ)
-        self.log_trajectory.write("node: %s  step: %d potential: %15.6f chi_differ: %15.6f \n"
-                                  %(self.node_numb, step, Un, chi_differ))
-        for atom in self.atoms:
-            self.log_trajectory.write("%s  %15.6f  %15.6f  %15.6f\n" % (atom.symbol,
-                                     atom.x, atom.y, atom.z))
-        self.log_trajectory.flush()
-    '''
 
-    def log_atoms(self,step, Un, chi_differ):
-        output_atoms = open(self.configs_dir+'/'+str(step),'w')
+    def log_atoms(self,state, Un, chi_differ):
+        output_atoms = open(self.configs_dir+'/'+state,'w')
         output_atoms.write("%d\n" % (len(self.atoms)))
         #print type(Un), type(chi_differ)
-        output_atoms.write("node: %s  step: %d potential: %15.6f chi_differ: %15.6f \n"
-                                  %(self.node_numb, step, Un, chi_differ))
+        output_atoms.write("state: %s  potential: %15.6f chi_differ: %15.6f \n"
+                                  %(state, Un, chi_differ))
         for atom in self.atoms:
             output_atoms.write("%s  %15.6f  %15.6f  %15.6f\n" % (atom.symbol,
                                      atom.x, atom.y, atom.z))
         output_atoms.close()
+
     #log atoms, used for debug
-    def dump_atoms(self,atoms, filename):
-        atoms_debug = open(filename, 'w')
+    def dump_atoms(self,atoms, filename, mode='w'):
+        atoms_debug = open(filename, mode)
         for config in atoms:
             atoms_debug.write("%d\n" % (len(config)))
             atoms_debug.write(" \n")
@@ -561,16 +552,14 @@ class BasinHopping(Dynamics):
         print 'get_minimum',self.Umin
         return self.Umin, atoms
   
-    def config_memo(self, step):
+    def config_memo(self, new_state):
         """Add the new config if it is not visited before:
            Compare energies first, then compare geometries
         """
-        lm_trajectory = self.lm_traject.split('_')
         repeated = False
         count = 0
         readtime = 0.0
         matchtime = 0.0
-        #print "visited_configs:",self.visited_configs
         if self.visited_configs:
            for state in self.visited_configs:
                if abs(self.energy - self.visited_configs[state][0]) < self.comp_eps_e:
@@ -591,7 +580,7 @@ class BasinHopping(Dynamics):
                
                   #print "rot match or not:", rot_match(config_o, self.atoms, self.comp_eps_r)
                   #If the new structure has been visited, read chi data from library
-                  if match(config_o, self.atoms, self.comp_eps_r, 3.0, self.indistinguishable):
+                  if match(config_o, self.atoms, self.comp_eps_r, self.cutoff, self.indistinguishable):
                      print "Found a repeat of state:", state
                      repeated = True
                      self.visited_configs[state][3] += 1
@@ -600,7 +589,7 @@ class BasinHopping(Dynamics):
                      matchtime += time.time() - donetime 
                      count += 1
 
-                     self.log_time(step, readtime, matchtime, count)
+                     self.log_time(new_state, readtime, matchtime, count)
 
                      return repeated, state
                   matchtime += time.time() - donetime 
@@ -609,11 +598,7 @@ class BasinHopping(Dynamics):
         #a new state is found or visited_configs is empty
         #Note: chi_deviation is not calculated yet
         if not repeated:
-           self.log_time(step, readtime, matchtime, count)
-           if self.pareto_step is None:
-              new_state = str(step)
-           else:
-              new_state = self.pareto_step + '_' + self.node_numb + '_' + str(step)
+           self.log_time(new_state, readtime, matchtime, count)
            if new_state in self.visited_configs:
               return repeated, new_state
               
@@ -709,7 +694,7 @@ class BasinHopping(Dynamics):
         self.dump_atoms(md_atoms,'stabilize_stru.xyz')
         return stabilized, md_cycle 
 
-    def get_energy(self, positions=None, symbols=None, step=-10):
+    def get_energy(self, positions=None, symbols=None):
         """Return the energy of the nearest local minimum."""
 #        if np.sometrue(self.positions != positions):
         if positions is not None:
@@ -718,7 +703,6 @@ class BasinHopping(Dynamics):
         if symbols is not None:
            self.atoms.set_chemical_symbols(symbols)
         atoms = self.atoms
-        #self.dump_atoms(sort(atoms))
         try:
             if self.lammps:
                print "lammps is running to optimize geometry"
@@ -750,9 +734,6 @@ class BasinHopping(Dynamics):
             print 'Total energy: ', self.energy
             print '--------------------------------------------'
 
-            
-#            if self.all_local is not None:
-#               self.all_local.write(self.atoms)
         except:
                 # Something went wrong.
                 # In GPAW the atoms are probably to near to each other.
@@ -760,7 +741,7 @@ class BasinHopping(Dynamics):
         
         return self.energy
 
-    def get_chi_deviation(self, positions, step):
+    def get_chi_deviation(self, positions, state):
         """Return the standard deviation of chi between calculated and
         experimental."""
         self.positions = positions
@@ -781,25 +762,16 @@ class BasinHopping(Dynamics):
                   return None, stabilize
                #The structure converts to a new structure during MD simulation
                #Check if it was visited or not. If visited, pop out the added state
-               if md_cycle > 1 and step > -1:
-                  self.repeated, self.state = self.config_memo(step)
+               if md_cycle > 1 and len(self.visited_configs) > 1:
+                  self.repeated, self.state = self.config_memo(state)
                   if self.repeated:
-                     self.visited_configs.pop(str(step))
+                     self.visited_configs.pop(state)
                      return self.chi_deviation, True
 
                if self.lammps:
                   md_trajectory = 'trj_lammps'
-                  #lp =lammps_caller(atoms=self.atoms,
-                  #                  ncore = self.ncore,
-                  #                  specorder = self.specorder)
-                  #lp.run('md')
                else:
                   md_trajectory = self.md_trajectory
-                  #run_md(atoms=self.atoms, 
-                  #       md_step = self.md_step,
-                  #       temperature = self.md_temperature,
-                  #       step_size = self.md_step_size,
-                  #       trajectory = md_trajectory)
             
             print '--------------------------------------------'
         except:
@@ -820,7 +792,7 @@ class BasinHopping(Dynamics):
                    cp_cmd = 'cp exafs.chir '+'pdf_' + self.specorder[i] +'.chir'
                    os.system(cp_cmd)
                    i+=1
-                   self.log_exafs(step, calc.get_absorber(), chi_deviation)
+                   self.log_exafs(state, calc.get_absorber(), chi_deviation)
                    self.chi_differ.append(chi_deviation)
             else:
                if self.md:
@@ -829,7 +801,7 @@ class BasinHopping(Dynamics):
                else:
                   print 'calculate exafs with optimized structure'
                   chi_deviation, self.k, self.chi = self.exafs_calculator.get_chi_differ(atoms = self.atoms)
-               self.log_exafs(step, self.exafs_calculator.get_absorber(), chi_deviation)
+               self.log_exafs(state, self.exafs_calculator.get_absorber(), chi_deviation)
                self.chi_differ.append(chi_deviation)
 
             self.chi_deviation = sum(x for x in self.chi_differ)

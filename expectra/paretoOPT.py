@@ -119,9 +119,10 @@ class ParetoLineOptimize(Dynamics):
         self.Umin = 1.e32
         self.rmin = self.atoms.get_positions()
         self.dots = []
-        self.traj = []
+        self.state = []
         self.pareto_atoms = []
         self.pareto_line = []
+        self.pareto_state = []
         self.debug = open('debug', 'w')
         self.configs_dir = os.getcwd()+'/configs'
         self.exafs_dir = os.getcwd()+'/exafs'
@@ -205,11 +206,11 @@ class ParetoLineOptimize(Dynamics):
                 #define file names used to store data
                 pareto_step = str(step)
                 node_numb = str(i)
-                trajectory = self.trajectory+'_'+ pareto_step + "_" + node_numb + ".traj"
-                md_trajectory = self.md_trajectory+"_"+pareto_step + "_" + node_numb
-                exafs_logfile = self.exafs_logfile + "_" + pareto_step + "_" + node_numb
-                logfile = self.logfile + "_" + pareto_step + "_" + node_numb
-                lm_trajectory = self.local_minima_trajectory + "_" + pareto_step + "_" + node_numb
+                #trajectory = self.trajectory+'_'+ pareto_step + "_" + node_numb + ".traj"
+                #md_trajectory = self.md_trajectory+"_"+pareto_step + "_" + node_numb
+                #exafs_logfile = self.exafs_logfile + "_" + pareto_step + "_" + node_numb
+                #logfile = self.logfile + "_" + pareto_step + "_" + node_numb
+                #lm_trajectory = self.local_minima_trajectory + "_" + pareto_step + "_" + node_numb
                 opt = BasinHopping(atoms,
                                    alpha = alpha[i],
                                    scale_ratio = scale_ratio,
@@ -224,18 +225,22 @@ class ParetoLineOptimize(Dynamics):
                                    visited_configs = self.visited_configs
                                    **kwargs
                                    )
+                #old configs visited
                 configs_o = self.visited_configs.copy()
+                #updated configs after current bh runs
                 self.visited_configs.update(opt.run(bh_steps))
+                #new configs visited in current bh runs
                 configs_n = self.differ_configs(configs_o)
 
-                #read the dots and geometries obtained from basin hopping
-                #dots = read_dots(logfile)
-                #traj = read_atoms(lm_trajectory)
+                #store the dots and the corresponding states obtained from basin hopping
+                dots = []
+                state = []
 
                 #initialize pareto line
                 if step == 0 and i == 0:
                    pareto_base.append([configs_n['0_0_-1'][0], configs_n['0_0_-1'][1]])
                    self.pareto_line = copy.deepcopy(pareto_base)
+                   self.pareto_state.append('0_0_-1')
                    self.pareto_atoms.append(configs_n['0_0_-1'][3])
                 #else:
                 #   dots.pop(0)
@@ -243,10 +248,14 @@ class ParetoLineOptimize(Dynamics):
 
                 #pick out the dots which can push pareto line
                 accepted_numb = 0
-                for key in xrange (len(configs_n)):
+                self.log_paretoLine.write("==============================================")
+                self.log_paretoLine.write("%s: %d, %s: %d" % ("pl_cycle", step, "node", i))
+                for key in configs_n:
+                    dot = [configs_n[key][0], configs_n[key][1]]
+                    dots.append(dot)
+                    state.append(key)
                     if key == '0_0_-1':
                        continue
-                    dot = [configs_n[key][0], configs_n[key][1]]
                     promoter = self.dots_filter(pareto_base, dot)
                     if promoter:
                        self.pareto_push(step, i, dot, configs_n[key][3])
@@ -259,8 +268,8 @@ class ParetoLineOptimize(Dynamics):
                 print "Total_prob: ", total_prob
                 
                 #store all the dots and images for sampling
-                #self.dots.extend(dots)
-                #self.traj.extend(traj)
+                self.dots.extend(dots)
+                self.state.extend(state)
 
             #update base pareto_line after one pareto cycle
             pareto_base = copy.deepcopy(self.pareto_line)
@@ -359,26 +368,34 @@ class ParetoLineOptimize(Dynamics):
                continue
         return promoter
 
-    def pareto_push(self, step, node_numb, dot_n, atom_n): 
+    def pareto_push(self, state_n, dot_n, atom_n): 
         """
         Parabolic method to determine if accept rn or not
         """
         #only one dot in pareto_line
         temp = copy.deepcopy(self.pareto_line)
+        action = None
         if len(temp)==1:
            if dot_n[0] < temp[0][0] and dot_n[1] > temp[0][1]:
+              action = 'insert'
               self.pareto_line[0] = dot_n
               self.pareto_line.append(temp[0])
               self.pareto_atoms.append(self.pareto_atoms[0])
               self.pareto_atoms[0] = atom_n
+              self.pareto_state.append(self.pareto_state[0])
+              self.pareto_state[0] = state_n
            elif dot_n[0] > temp[0][0] and dot_n[1] < temp[0][1]:
+              action = 'append'
               self.pareto_line.append(dot_n)
               self.pareto_atoms.append(atom_n)
+              self.pareto_state.append(state_n)
            elif dot_n[0] < temp[0][0] and dot_n[1] < temp[0][1]:
+              action = 'replace'
               self.pareto_line[0] = dot_n
               self.pareto_atoms[0] = atom_n
+              self.pareto_state[0] = state_n
            if self.pareto_line != temp:
-              self.logParetoLine(step, node_numb)
+              self.logParetoLine(state_n, action)
            return 
         
         #more than one dot in pareto_line
@@ -400,8 +417,10 @@ class ParetoLineOptimize(Dynamics):
 
                cross_f1 = self.get_cross(dot_c, dot_f1, dot_n)
                if dot_n[0] < dot_b1[0] and cross_f1 < 0:
+                  action = 'insert'
                   self.pareto_line.insert(0, dot_n)
                   self.pareto_atoms.insert(0, atom_n)
+                  self.pareto_state.insert(0, state_n)
                   continue
 
             elif i == len(temp)-2 and i != 0:
@@ -417,14 +436,20 @@ class ParetoLineOptimize(Dynamics):
                cross = self.get_cross(temp[i-1], temp[i], dot_n)
                if dot_n[1] < temp[i][1] and cross > 0 :
                   if replace:
+                     action = 'pop'
                      self.pareto_line.pop(index)
                      self.pareto_atoms.pop(index)
+                     self.pareto_state.pop(index)
                   else:
+                     action = 'replace'
                      self.pareto_line[index] = dot_n
                      self.pareto_atoms[index] = atom_n
+                     self.pareto_state[index] = state_n
                elif dot_n[1] < temp[i][1] and cross < 0:
+                    action = 'append'
                     self.pareto_line.append(dot_n)
                     self.pareto_atoms.append(atom_n)
+                    self.pareto_state.append(state_n)
                continue
             else:
                dot_b1 = temp[i-1]
@@ -446,39 +471,44 @@ class ParetoLineOptimize(Dynamics):
                   #A previous dot has already been replaced. Discard the current one
                   #'poped' is to record the number of dots poped before current one 
                   #which will change the location of current dot
+                  action = 'pop'
                   self.pareto_line.pop(index)
                   self.pareto_atoms.pop(index)
+                  self.pareto_state.pop(index)
                   self.debug.write('%d  %s  %d\n' % (i, 'poped',  index))
                else:
+                  action ='replace'
                   self.pareto_line[index] = dot_n
                   self.pareto_atoms[index] = atom_n
+                  self.pareto_state[index] = state_n
                   self.debug.write('%d  %s  %d\n' % (i, 'replaced',  index))
                   replace = True
                continue
             elif cross_b1 < 0  and cross_f1 > 0 and cross_f2 <0:
                #If 'insert' happens, no further action to other dots is needed
+               action ='insert'
                self.pareto_line.insert(index+1, dot_n)
                self.pareto_atoms.insert(index+1, atom_n)
+               self.pareto_state.insert(index+1, state_n)
                self.debug.write('%d  %s  %d\n' % (i, 'inserted',  index+1))
                if self.pareto_line != temp:
-                  self.logParetoLine(step, node_numb)
+                  self.logParetoLine(state_n, action)
                return 
             else:
                #For other situations, no acition is needed
                self.debug.write('%d  %s  %d\n' % (i, 'nothing done',  index))
                continue
         if self.pareto_line != temp:
-           self.logParetoLine(step, node_numb)
+           self.logParetoLine(state_n, action)
         return 
     
-    def logParetoLine(self, step, node_numb):
+    def logParetoLine(self, state_n, action=None):
         pareto_line = self.pareto_line
         if self.log_paretoLine is None:
             return
-        self.log_paretoLine.write('%s = %d  %s = %d %s = %d\n' % ("step", step, 
-                                   "# of node", node_numb, "dot_number", len(pareto_line)))
+        self.log_paretoLine.write('%s : %s\n' % (state_n, action))
         for i in range(0, len(pareto_line)):
-             self.log_paretoLine.write('%15.6f  %15.6f\n' % (pareto_line[i][0], pareto_line[i][1]))
+             self.log_paretoLine.write('%s %15.6f  %15.6f\n' % (self.pareto_state[i], pareto_line[i][0], pareto_line[i][1]))
         self.log_paretoLine.flush()
         
 
@@ -670,9 +700,9 @@ class ParetoLineOptimize(Dynamics):
            print 'The selected dot is on the pareto line found'
         print 'The dot selected for bh: ', dots[index], dots[min_index]
         print 'atom index found: ', index, 'away from minimum:', min_index,' ', U[index]
-        atoms = self.traj[index]
-        atoms.set_cell([[80,0,0],[0,80,0],[0,0,80]],scale_atoms=False,fix=None)
-        return atoms
+        atoms = read_atoms(filename=self.configs_dir + '/'+ self.state[index])
+        atoms[0].set_cell([[80,0,0],[0,80,0],[0,0,80]],scale_atoms=False,fix=None)
+        return atoms[0]
     '''
     def pop_lowProb_dots(self,p):
         index = [i for i, v in enumerate(p) if p < 2**-52]
