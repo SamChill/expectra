@@ -20,6 +20,7 @@ from expectra.io import read_atoms
 #from expectra.switch_elements import switch_elements
 from expectra.atoms_operator import match, single_atom
 from expectra.lammps_caller import lammps_caller
+from expectra import default_parameters
 import random
 import sys
 import os
@@ -29,6 +30,8 @@ sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
 
 COMM_WORLD = mpi4py.MPI.COMM_WORLD
 
+default_parameters=default_parameters.default_parameters
+
 def make_dir(path):
     try:
         os.makedirs(path)
@@ -36,57 +39,6 @@ def make_dir(path):
         if exception.errno != errno.EEXIST:
            raise
 
-default_parameters=dict(
-             #Switch or modify elements in structures
-             move_atoms = True,
-             switch = False,
-             active_ratio = None, #percentage of atoms will be used to switch or modified
-             cutoff=None,
-             elements_lib = None, #elements used to replace the atoms
-             #Structure optimization
-             optimizer=FIRE,
-             max_optsteps=1000,
-             fmax=0.001,
-             mss=0.2,
-             #MD parameters
-             md = False,
-             md_temperature = 300 * kB,
-             md_step_size = 1 * fs,
-             md_steps = 10000,
-             max_md_cycle = 10,
-             md_trajectory = 'md.traj',
-             md_interval = 10,
-             in_memory_mode = True,
-             specorder = None, #for 'lammps', specify the order of species which should be same to that in potential file
-             #Basin Hopping parameters
-             temperature = 300 * kB,
-             dr=0.5,
-             distribution='uniform',
-             adjust_method = 'local', #method used to adjust dr, available selection: global, local, linear
-             adjust_step_size = None,
-             target_ratio = 0.5,
-             adjust_fraction = 0.05,
-             adjust_temperature = False,
-             temp_adjust_fraction = 0.05,
-             significant_structure = False,  # displace from minimum at each move
-             pushapart = 0.4,
-             jumpmax=None,
-             substrate = None,
-             absorbate = None,
-             z_min=14.0,
-             adjust_cm=True,
-             minenergy=None,
-             #Structure Comparison
-             indistinguishable = True,
-             match_structure = False,
-             visited_configs = {}, # {'state_number': [energy, chi, repeats], ...}
-             comp_eps_e = 1.e-3, #criterion to determine if two configurations are identtical in energy 
-             comp_eps_r = 0.2, #criterion to determine if two configurations are identical in geometry
-             #files logging data
-             logfile='basin_log', 
-             trajectory='lowest.traj',
-             optimizer_logfile='geo_opt.log',
-             )
 
 class BasinHopping(Dynamics):
     """Basin hopping algorithm.
@@ -105,6 +57,7 @@ class BasinHopping(Dynamics):
                  ncore = 2,
                  opt_calculator = None,
                  exafs_calculator = None,
+                 visited_configs = {}, # {'state_number': [energy, chi, repeats], ...}
                  **kwargs
                  ):
 
@@ -115,6 +68,7 @@ class BasinHopping(Dynamics):
         self.ncore = ncore
         self.opt_calculator = opt_calculator
         self.exafs_calculator = exafs_calculator
+        self.visited_configs = visited_configs
 
         if self.opt_calculator == 'lammps':
            print "lammps is true"
@@ -153,13 +107,10 @@ class BasinHopping(Dynamics):
        #     tsase.io.write_con(self.lm_trajectory,atoms,w='w')
        # self.all_local = Trajectory("all_opted_local.traj",
        #                                           'w', atoms)
-        self.configs_dir = os.getcwd()+'/configs'
-        self.exafs_dir = os.getcwd()+'/exafs'
-        self.pot_dir = os.getcwd()+'/pot'
         make_dir(self.configs_dir)
         make_dir(self.exafs_dir)
         make_dir(self.pot_dir)
-        self.logfile = self.pot_dir +'/'+self.logfile
+        self.logfile = ''.join(filter(None,[self.pot_dir,'/',self.logfile,'_',self.pareto_step,'_',self.node_numb]))
 
         Dynamics.__init__(self, atoms, self.logfile, self.trajectory)
         self.initialize()
@@ -256,15 +207,16 @@ class BasinHopping(Dynamics):
                    print 'move atoms'
                    rn = self.move(ro)
                    symbol_n = symbol_o
-                   if single_atom(self.atoms, rn, 5.0):
-                      bad_numb += 1
-                      bad_configs.append(self.atoms.set_positions(rn))
-                      if bad_numb > 20:
-                         self.dump_atoms(bad_configs, config_single.xyz)
-                         sys.exit()
-                      continue
+                   #print rn
                 start_time = time.time()
                 En = self.get_energy(rn, symbol_n)
+                if single_atom(self.atoms, self.atoms.get_positions(), 5.0):
+                   bad_numb += 1
+                   bad_configs.append(self.atoms.copy())
+                   if bad_numb > 20:
+                      self.dump_atoms(atoms=bad_configs, filename='config_single.xyz')
+                      sys.exit()
+                   continue
                 #check if the new configuration was visited
                 if self.match_structure:
                    self.repeated, self.state = self.config_memo(state)
@@ -433,7 +385,7 @@ class BasinHopping(Dynamics):
         output_atoms.close()
 
     #log atoms, used for debug
-    def dump_atoms(self,atoms, filename, mode='w'):
+    def dump_atoms(self, atoms, filename, mode='w'):
         atoms_debug = open(filename, mode)
         for config in atoms:
             atoms_debug.write("%d\n" % (len(config)))
@@ -610,6 +562,7 @@ class BasinHopping(Dynamics):
     '''
     def run_md(self, md_steps=100):
         print "Running MD simulation:"
+        #print self.atoms
         # Set the momenta corresponding to md_temperature
         #self.atoms.set_calculator(self.opt_calculator)
         atoms_md = []
@@ -625,7 +578,7 @@ class BasinHopping(Dynamics):
            def md_log(atoms=self.atoms):
                atoms_md.append(atoms.copy())
                e_log.append([atoms.get_potential_energy(), atoms.get_kinetic_energy()])
-           dyn.attach(md_log, interval=self.md_interval)    
+           dyn.attach(md_log, interval=self.md_interval)
            for i in range (md_steps):
                dyn.run(1)
            return atoms_md, e_log
@@ -677,6 +630,7 @@ class BasinHopping(Dynamics):
                  print pot_energy
               except:
                  print "MD Error"
+                 sys.exit()
            #md_atoms.append(self.atoms.copy())
            md_cycle += 1
            if abs(pot_energy - pot_energy_old)<self.comp_eps_e:

@@ -3,68 +3,15 @@ import numpy as np
 import copy
 
 from ase.optimize.optimize import Dynamics
-from ase.optimize.fire import FIRE
-#from ase.optimize.LBFGS import LBFGS
 from ase.units import kB, fs
 from ase.parallel import world
 from ase.io import write
 from ase.io.trajectory import Trajectory
 from expectra.basin_surface import BasinHopping
+from expectra import default_parameters as dp
 from expectra.io import read_dots, read_atoms, write_atoms
 
-default_parameters=dict(
-             #Switch or modify elements in structures
-             move_atoms = True,
-             switch = False,
-             active_ratio = None, #percentage of atoms will be used to switch or modified
-             cutoff=None,
-             elements_lib = None, #elements used to replace the atoms
-             #Structure optimization
-             optimizer=FIRE,
-             max_optsteps=1000,
-             fmax=0.001,
-             mss=0.2,
-             #MD parameters
-             md = False,
-             md_temperature = 300 * kB,
-             md_step_size = 1 * fs,
-             md_steps = 10000,
-             max_md_cycle = 10,
-             md_trajectory = 'md.traj',
-             md_interval = 10,
-             in_memory_mode = True,
-             specorder = None, #for 'lammps', specify the order of species which should be same to that in potential file
-             #Basin Hopping parameters
-             temperature = 300 * kB,
-             dr=0.5,
-             distribution='uniform',
-             adjust_method = 'local', #method used to adjust dr, available selection: global, local, linear
-             adjust_step_size = None,
-             target_ratio = 0.5,
-             adjust_fraction = 0.05,
-             adjust_temperature = False,
-             temp_adjust_fraction = 0.05,
-             significant_structure = False,  # displace from minimum at each move
-             pushapart = 0.4,
-             jumpmax=None,
-             substrate = None,
-             absorbate = None,
-             z_min=14.0,
-             adjust_cm=True,
-             minenergy=None,
-             #Structure Comparison
-             indistinguishable = True,
-             match_structure = False,
-             visited_configs = {}, # {'state_number': [energy, chi, repeats], ...}
-             comp_eps_e = 1.e-4, #criterion to determine if two configurations are identtical in energy 
-             comp_eps_r = 0.2, #criterion to determine if two configurations are identical in geometry
-             #files logging data
-             logfile='basin_log', 
-             trajectory='lowest.xyz',
-             optimizer_logfile='geo_opt.log',
-             local_minima_trajectory='localminima.xyz',
-             exafs_logfile = 'exafs.dat'
-             )
+default_parameters=dp.default_parameters
 
 class ParetoLineOptimize(Dynamics):
 
@@ -77,7 +24,7 @@ class ParetoLineOptimize(Dynamics):
                  bh_steps_0 = 10,
                  scale = False,
                  sample_method = 'boltzmann',
-                 boltzmann_temp = 300 *kB,
+                 boltzmann_temp = 4000 *kB,
                  mini_output = True, #minima output
                  alpha = None,
                  log_paretoLine = 'paretoLine.dat',
@@ -97,13 +44,15 @@ class ParetoLineOptimize(Dynamics):
         self.boltzmann_temp = boltzmann_temp
 
         self.alpha = alpha
-
+        self.log_paretoLine = log_paretoLine
+        self.log_paretoAtoms = log_paretoAtoms
         for parameter in kwargs:
             if parameter not in default_parameters:
                print parameter, 'is not in the keywords included'
-               break
+               sys.exit()
         for (parameter, default) in default_parameters.iteritems():
             setattr(self, parameter, kwargs.get(parameter, default))
+            self.parameters = kwargs.copy()
 
         if isinstance(self.log_paretoLine, str):
             self.log_paretoLine = open(self.log_paretoLine, 'w')
@@ -115,21 +64,14 @@ class ParetoLineOptimize(Dynamics):
         self.initialize()
 
     def initialize(self):
-        #self.energy = 1.e32
-        self.Umin = 1.e32
-        self.rmin = self.atoms.get_positions()
         self.dots = []
-        self.state = []
+        self.states = []
         self.pareto_atoms = []
         self.pareto_line = []
         self.pareto_state = []
+        self.visited_configs = {}
         self.debug = open('debug', 'w')
-        self.configs_dir = os.getcwd()+'/configs'
-        self.exafs_dir = os.getcwd()+'/exafs'
-        self.pot_dir = os.getcwd()+'/pot'
 
-#        self.logfile.write('   name      step accept     energy         chi_difference\n')
-                
     def run(self, steps):
         """Hop the basins for defined number of steps."""
 
@@ -155,16 +97,16 @@ class ParetoLineOptimize(Dynamics):
             total_prob = 0.0
             alpha = []
 
-            if step == 0:
-               bh_steps = self.bh_steps_0
-            else:
-               bh_steps = self.bh_steps
+            #if step == 0:
+            #   bh_steps = self.bh_steps_0
+            #else:
+            #   bh_steps = self.bh_steps
 
             print "====================================================================="
             print "ParetoLine cycle ", step
             for i in range (nnode):
                 print "====================================================================="
-                #Fixed alpha
+                #a fixed alpha value is used
                 if self.alpha is not None:
                    alpha.append(self.alpha)
                    if step == 0:
@@ -176,8 +118,8 @@ class ParetoLineOptimize(Dynamics):
                       else:
                          scale_ratio = E_factor/S_factor
                 
+                #dynamically select alpha
                 else:     
-                   #dynamically select alpha
                    if step == 0:
                       index = i
                       atoms = self.atoms
@@ -206,35 +148,29 @@ class ParetoLineOptimize(Dynamics):
                 #define file names used to store data
                 pareto_step = str(step)
                 node_numb = str(i)
-                #trajectory = self.trajectory+'_'+ pareto_step + "_" + node_numb + ".traj"
-                #md_trajectory = self.md_trajectory+"_"+pareto_step + "_" + node_numb
-                #exafs_logfile = self.exafs_logfile + "_" + pareto_step + "_" + node_numb
-                #logfile = self.logfile + "_" + pareto_step + "_" + node_numb
-                #lm_trajectory = self.local_minima_trajectory + "_" + pareto_step + "_" + node_numb
                 opt = BasinHopping(atoms,
                                    alpha = alpha[i],
                                    scale_ratio = scale_ratio,
+                                   pareto_step = pareto_step,
+                                   node_numb = node_numb,
+                                   ncore = self.ncore,
                                    opt_calculator = self.opt_calculator,
                                    exafs_calculator = self.exafs_calculator,
-                                   ncore = self.ncore,
                                    #Switch or modify elements in structures
-                                   logfile = logfile, 
-                                   trajectory = trajectory,
-                                   local_minima_trajectory = lm_trajectory,
-                                   exafs_logfile = exafs_logfile,
-                                   visited_configs = self.visited_configs
-                                   **kwargs
+                                   visited_configs = self.visited_configs.copy(),
+                                   **self.parameters
                                    )
                 #old configs visited
                 configs_o = self.visited_configs.copy()
                 #updated configs after current bh runs
-                self.visited_configs.update(opt.run(bh_steps))
+                new_configs = opt.run(self.bh_steps)
+                self.visited_configs.update(new_configs.copy())
                 #new configs visited in current bh runs
                 configs_n = self.differ_configs(configs_o)
 
                 #store the dots and the corresponding states obtained from basin hopping
                 dots = []
-                state = []
+                states = []
 
                 #initialize pareto line
                 if step == 0 and i == 0:
@@ -248,20 +184,23 @@ class ParetoLineOptimize(Dynamics):
 
                 #pick out the dots which can push pareto line
                 accepted_numb = 0
-                self.log_paretoLine.write("==============================================")
-                self.log_paretoLine.write("%s: %d, %s: %d" % ("pl_cycle", step, "node", i))
-                for key in configs_n:
-                    dot = [configs_n[key][0], configs_n[key][1]]
+                self.log_paretoLine.write("==============================================\n")
+                self.log_paretoLine.write("%s: %d, %s: %d\n" % ("pl_cycle", step, "node", i))
+                for state in configs_n:
+                    dot = [configs_n[state][0], configs_n[state][1]]
                     dots.append(dot)
-                    state.append(key)
-                    if key == '0_0_-1':
+                    states.append(state)
+                    if state == '0_0_-1':
                        continue
                     promoter = self.dots_filter(pareto_base, dot)
                     if promoter:
-                       self.pareto_push(step, i, dot, configs_n[key][3])
+                       self.pareto_push(state, dot, configs_n[state][3])
                        accepted_numb += 1
                 print "Accepted number", accepted_numb, "dots number", len(dots)
-                accept_ratio[i] = accept_ratio[i] + float(accepted_numb) / float(len(dots))
+                if len(dots) != 0:
+                   accept_ratio[i] = accept_ratio[i] + float(accepted_numb) / float(len(dots))
+                else: 
+                   accept_ratio[i] = 0.0
                 print "Accepted ratio: ", accept_ratio
                 #prob[i] = prob[i] + accepted_numb / len(dots)
                 total_prob = total_prob + accept_ratio[i]
@@ -269,7 +208,7 @@ class ParetoLineOptimize(Dynamics):
                 
                 #store all the dots and images for sampling
                 self.dots.extend(dots)
-                self.state.extend(state)
+                self.states.extend(states)
 
             #update base pareto_line after one pareto cycle
             pareto_base = copy.deepcopy(self.pareto_line)
@@ -340,12 +279,13 @@ class ParetoLineOptimize(Dynamics):
         configs_n = {}
         for key in self.visited_configs:
             if key not in configs_o:
-               configs_n[key] = self.visited_configs.get(key)
+               #visited_configs[key] is a list. need to use copy
+               configs_n[key] = copy.deepcopy(self.visited_configs.get(key))
                atoms = read_atoms(filename=self.configs_dir+'/'+key)
                configs_n[key][3]= atoms[0]
                continue
             if cmp(self.visited_configs[key], configs_o[key])!=0:
-               configs_n[key] = self.visited_configs.get(key)
+               configs_n[key] = copy.deepcopy(self.visited_configs.get(key))
                atoms = read_atoms(filename=self.configs_dir+'/'+key)
                configs_n[key][3]= atoms[0]
         return configs_n
@@ -510,36 +450,6 @@ class ParetoLineOptimize(Dynamics):
         for i in range(0, len(pareto_line)):
              self.log_paretoLine.write('%s %15.6f  %15.6f\n' % (self.pareto_state[i], pareto_line[i][0], pareto_line[i][1]))
         self.log_paretoLine.flush()
-        
-
-    def log(self, step, accept, para_accept, alpha, En, Sn, Un, Umin):
-        if self.logfile is None:
-            return
-        name = self.__class__.__name__
-        self.logfile.write('%s: %d  %d %d %15.6f  %15.6f  %15.8f  %15.6f  %15.6f\n'
-                           % (name, step, accept, para_accept, alpha, En, Sn, Un, Umin))
-        self.logfile.flush()
-
-    def log_chi(self, step):
-        self.chi_log.write("step: %d\n" % (step))
-        x = self.x_thy
-        y = self.y_thy
-        for i in xrange(len(x)):
-            self.chi_log.write("%6.3f %16.8e\n" % (x[i], y[i]))
-        self.chi_log.flush()
-
-    def single_atom(self, rn):
-        atoms = self.atoms
-        atoms.set_positions(rn)
-        for i in range (len(atoms)):
-            coordination = 0
-            for j in range (len(atoms)):
-                if j != i:
-                   if atoms.get_distance(i,j) < self.cutoff:
-                      coordination +=1
-            if coordination == 0:
-               return True
-        return False
 
     #select index based on the probablility provided
     def sample_index(self, probability=[]):
@@ -669,12 +579,6 @@ class ParetoLineOptimize(Dynamics):
         cross_vect = np.cross(vect2, vect1)  # vect2 X vect1
         return cross_vect
 
-    def get_minimum(self):
-        """Return minimal energy and configuration."""
-        atoms = self.atoms.copy()
-        atoms.set_positions(self.rmin)
-        return self.Umin, atoms
-    
     def boltzmann_sample(self, alpha, beta):
         temp = 0.0
         dots = np.array(self.dots)
@@ -700,7 +604,7 @@ class ParetoLineOptimize(Dynamics):
            print 'The selected dot is on the pareto line found'
         print 'The dot selected for bh: ', dots[index], dots[min_index]
         print 'atom index found: ', index, 'away from minimum:', min_index,' ', U[index]
-        atoms = read_atoms(filename=self.configs_dir + '/'+ self.state[index])
+        atoms = read_atoms(filename=self.configs_dir + '/'+ self.states[index])
         atoms[0].set_cell([[80,0,0],[0,80,0],[0,0,80]],scale_atoms=False,fix=None)
         return atoms[0]
     '''
