@@ -16,6 +16,7 @@ default_parameters=dp.default_parameters
 class ParetoLineOptimize(Dynamics):
 
     def __init__(self, atoms,
+                 dr = 0.5,
                  opt_calculator = None,
                  exafs_calculator = None,
                  nnode = 5,
@@ -33,6 +34,7 @@ class ParetoLineOptimize(Dynamics):
                  ):
 #       Dynamics.__init__(self, atoms, logfile, trajectory)
         self.atoms = atoms
+        self.dr = dr
         self.opt_calculator = opt_calculator
         self.exafs_calculator = exafs_calculator
         self.nnode = nnode
@@ -80,10 +82,12 @@ class ParetoLineOptimize(Dynamics):
         interval = 1.0 / float(nnode)
         target_ratio = interval
         alpha_list = []
+        dr_list = []
         prob = []
         accept_ratio = []
         pareto_base = []
         images = []
+        atoms_state = None
         E_factor = None
         S_factor = None
         for i in range (nnode):
@@ -91,17 +95,16 @@ class ParetoLineOptimize(Dynamics):
             accept_ratio.append(interval)
             prob.append(interval)
             images.append(None)
+            dr_list.append(self.dr)
         alpha_list.append(1.0)
         
         for step in range(steps):
             total_prob = 0.0
             alpha = []
-
             #if step == 0:
             #   bh_steps = self.bh_steps_0
             #else:
             #   bh_steps = self.bh_steps
-
             print "====================================================================="
             print "ParetoLine cycle ", step
             for i in range (nnode):
@@ -141,14 +144,16 @@ class ParetoLineOptimize(Dynamics):
                    if self.sample_method == 'pl_sample':
                       atoms = self.paretoLine_sample(alpha[i], scale_ratio)
                    elif self.sample_method == 'boltzmann':
-                      atoms = self.boltzmann_sample(alpha[i], scale_ratio)
+                      atoms, atoms_state = self.boltzmann_sample(alpha[i], scale_ratio)
                     
-                print "BasinHopping cycle ", i, "alpha:", alpha[i] 
+                print "BasinHopping cycle ", i, "alpha:", alpha[i], "step size", dr_list[i]
                 #run BasinHopping
                 #define file names used to store data
                 pareto_step = str(step)
                 node_numb = str(i)
-                opt = BasinHopping(atoms,
+                opt = BasinHopping(atoms=atoms,
+                                   atoms_state = atoms_state,
+                                   dr = dr_list[i],
                                    alpha = alpha[i],
                                    scale_ratio = scale_ratio,
                                    pareto_step = pareto_step,
@@ -163,8 +168,11 @@ class ParetoLineOptimize(Dynamics):
                 #old configs visited
                 configs_o = self.visited_configs.copy()
                 #updated configs after current bh runs
-                new_configs = opt.run(self.bh_steps)
+                new_configs, dr_list[i] = opt.run(self.bh_steps)
+                print "configs_o:", configs_o
+                print "new_configs:", new_configs
                 self.visited_configs.update(new_configs.copy())
+                print "updated configs_o:", self.visited_configs
                 #new configs visited in current bh runs
                 configs_n = self.differ_configs(configs_o)
 
@@ -232,6 +240,10 @@ class ParetoLineOptimize(Dynamics):
            print(self.pareto_atoms[0])
 
            write_atoms(self.log_paretoAtoms, self.pareto_atoms)
+        configs_output = open('visited_configs.dat', 'w')
+        for (key, value) in self.visited_configs.iteritems():
+            configs_output.write("%s  %15.6f  %15.6f  %d\n"%(key, value[0], value[1], value[3]))
+        configs_output.close()
 #        for atoms in pareto_atoms:
 #            self.log_paretoAtoms.write(atoms)
      
@@ -606,7 +618,7 @@ class ParetoLineOptimize(Dynamics):
         print 'atom index found: ', index, 'away from minimum:', min_index,' ', U[index]
         atoms = read_atoms(filename=self.configs_dir + '/'+ self.states[index])
         atoms[0].set_cell([[80,0,0],[0,80,0],[0,0,80]],scale_atoms=False,fix=None)
-        return atoms[0]
+        return atoms[0], self.states[index]
     '''
     def pop_lowProb_dots(self,p):
         index = [i for i, v in enumerate(p) if p < 2**-52]

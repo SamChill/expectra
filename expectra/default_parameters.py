@@ -21,13 +21,13 @@ default_parameters=dict(
              md_step_size = 2.0 * fs,
              md_steps = 4000,
              max_md_cycle = 10,
+             md_ttime = 25.0*fs,
              md_trajectory = 'md.traj',
              md_interval = 20,
              in_memory_mode = True,
              specorder = None, #for 'lammps', specify the order of species which should be same to that in potential file
              #Basin Hopping parameters
              temperature = 300 * kB,
-             dr=0.5,
              distribution='uniform',
              adjust_method = 'local', #method used to adjust dr, available selection: global, local, linear
              adjust_step_size = None,
