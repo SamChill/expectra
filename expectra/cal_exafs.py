@@ -239,9 +239,6 @@ class Expectra(Calculator):
         except:
             x_exp, y_exp = load_chi_dat(parameters.exp_file)
 
-        #filename2 = 'test_exp_chi.dat'
-        #save_result(x_exp, y_exp, filename2)
-
         #interpolate chi_exp values based on k values provided in calculated data
         x_exp, y_exp = match_x(x_thy, y_exp, x_exp, xmin, xmax)
         x_thy, y_thy = match_x(x_thy, y_thy, x_thy, xmin, xmax)

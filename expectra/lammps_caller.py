@@ -18,6 +18,7 @@ import numpy
 class lammps_caller:
       def __init__(self, atoms,
                    ncore=2,
+                   trajfile = 'trj_lammps',
                    specorder=None, #['Rh', 'Au']
                    data_lammps='data_lammps',
                    run_type='geo_opt',
@@ -28,7 +29,7 @@ class lammps_caller:
           self.data_lammps = data_lammps
           self.run_type = run_type
           self.logfile = 'log.lammps'
-          self.trajfile = 'trj_lammps'
+          self.trajfile = trajfile
 
 
       def get_energy(self):
@@ -49,6 +50,7 @@ class lammps_caller:
                    iteration = int(line.split()[4])
                    print "iteration:", iteration
           f.close()
+          print energy
           atoms = read_lammps_trj(filename=self.trajfile, skip=iteration, specorder=self.specorder)
           #write('lammps_opted.traj',images=atoms[0],format='traj')
           return energy, atoms[0]

@@ -314,7 +314,7 @@ End LAMMPSlib Interface Documentation
         self.lmp.scatter_atoms('x', 1, 3, lmp_c_positions)
 
         # Run for 0 time to calculate
-        self.lmp.command('run 0')
+        self.lmp.command('run 20000')
 
         # Extract the forces and energy
 #        if 'energy' in properties:

@@ -66,6 +66,8 @@ class ParetoLineOptimize(Dynamics):
         self.initialize()
 
     def initialize(self):
+        self.pbc = self.atoms.get_pbc()
+        self.cell = self.atoms.get_cell()
         self.dots = []
         self.states = []
         self.pareto_atoms = []
@@ -97,6 +99,8 @@ class ParetoLineOptimize(Dynamics):
             images.append(None)
             dr_list.append(self.dr)
         alpha_list.append(1.0)
+
+        debug = open("visited_history",'w')
         
         for step in range(steps):
             total_prob = 0.0
@@ -169,9 +173,9 @@ class ParetoLineOptimize(Dynamics):
                 configs_o = self.visited_configs.copy()
                 #updated configs after current bh runs
                 new_configs, dr_list[i] = opt.run(self.bh_steps)
+                self.visited_configs.update(new_configs.copy())
                 print "configs_o:", configs_o
                 print "new_configs:", new_configs
-                self.visited_configs.update(new_configs.copy())
                 print "updated configs_o:", self.visited_configs
                 #new configs visited in current bh runs
                 configs_n = self.differ_configs(configs_o)
@@ -294,11 +298,15 @@ class ParetoLineOptimize(Dynamics):
                #visited_configs[key] is a list. need to use copy
                configs_n[key] = copy.deepcopy(self.visited_configs.get(key))
                atoms = read_atoms(filename=self.configs_dir+'/'+key)
+               atoms[0].set_cell(self.cell)
+               atoms[0].set_pbc(self.pbc)
                configs_n[key][3]= atoms[0]
                continue
             if cmp(self.visited_configs[key], configs_o[key])!=0:
                configs_n[key] = copy.deepcopy(self.visited_configs.get(key))
                atoms = read_atoms(filename=self.configs_dir+'/'+key)
+               atoms[0].set_cell(self.cell)
+               atoms[0].set_pbc(self.pbc)
                configs_n[key][3]= atoms[0]
         return configs_n
                
@@ -617,7 +625,8 @@ class ParetoLineOptimize(Dynamics):
         print 'The dot selected for bh: ', dots[index], dots[min_index]
         print 'atom index found: ', index, 'away from minimum:', min_index,' ', U[index]
         atoms = read_atoms(filename=self.configs_dir + '/'+ self.states[index])
-        atoms[0].set_cell([[80,0,0],[0,80,0],[0,0,80]],scale_atoms=False,fix=None)
+        atoms[0].set_cell(self.cell)
+        atoms[0].set_pbc(self.pbc)
         return atoms[0], self.states[index]
     '''
     def pop_lowProb_dots(self,p):
