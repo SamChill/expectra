@@ -246,6 +246,9 @@ class Expectra(Calculator):
         self.x = x_thy
         self.y = y_thy
 
+        if not parameters.real_space:
+           y_thy = numpy.multiply(y_thy, numpy.power(x_thy, parameters.kweight))
+
         if parameters.debug:
            filename2 = 'rescaled_theory_chi.dat'
            save_result(x_thy, y_thy, filename2)

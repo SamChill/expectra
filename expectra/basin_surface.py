@@ -62,6 +62,7 @@ class BasinHopping(Dynamics):
                  opt_calculator = None,
                  exafs_calculator = None,
                  visited_configs = {}, # {'state_number': [energy, chi, repeats], ...}
+                 Umin = 1.0e32,
                  **kwargs
                  ):
         self.atoms_state = atoms_state
@@ -74,6 +75,7 @@ class BasinHopping(Dynamics):
         self.opt_calculator = opt_calculator
         self.exafs_calculator = exafs_calculator
         self.visited_configs = visited_configs
+        self.Umin = Umin
 
         if self.opt_calculator == 'lammps':
            print "lammps is true"
@@ -92,7 +94,7 @@ class BasinHopping(Dynamics):
            self.active_space = int(self.active_ratio * len(atoms))
 
         self.kT = self.temperature
-        self.time_logger = open('time_log.dat', 'w')
+        self.time_logger = open('time_log.dat', 'a')
 
         if self.adjust_cm:
             self.cm = atoms.get_center_of_mass()
@@ -141,7 +143,6 @@ class BasinHopping(Dynamics):
         self.chi_deviation = 100.00
         self.chi_differ = []
         self.positions = 0.0 * self.atoms.get_positions()
-        self.Umin = 1.e32 
         self.energy = 1.e32
         self.rmin = self.atoms.get_positions()
         self.local_min_pos = self.atoms.get_positions()
@@ -173,6 +174,7 @@ class BasinHopping(Dynamics):
         if self.atoms_state is not None:
            self.energy = self.visited_configs[self.atoms_state][0]
            chi_o = self.visited_configs[self.atoms_state][1]
+           self.chi_deviation =chi_o
            self.chi_differ = copy.deepcopy(self.visited_configs[self.atoms_state][2])
            Eo = self.energy
            self.state =self.atoms_state
@@ -196,17 +198,17 @@ class BasinHopping(Dynamics):
               self.visited_configs[self.state][1] = chi_o
               self.visited_configs[self.state][2] = copy.deepcopy(self.chi_differ)
            self.log_atoms(state, Uo, chi_o)
+           self.Umin =Uo
         print 'Energy: ', Eo, 'chi_differ: ', chi_o
         print '====================================================================='
 
         self.time_stamp = time.time() - start_time
 
-        self.log(-1, True, self.state, alpha, Eo, self.chi_differ, Uo, Uo)
+        self.log(-1, True, self.state, alpha, Eo, self.chi_differ, Uo, self.Umin)
 
         acceptnum = 0
         recentaccept = 0
         rejectnum = 0
-        self.Umin =Uo
         for step in range(steps):
             bad_numb = 0
             bad_configs = []
@@ -228,13 +230,13 @@ class BasinHopping(Dynamics):
                    #print rn
                 start_time = time.time()
                 En = self.get_energy(rn, symbol_n)
-                if single_atom(self.atoms, self.atoms.get_positions(), 5.0):
-                   bad_numb += 1
-                   bad_configs.append(self.atoms.copy())
-                   if bad_numb > 20:
-                      self.dump_atoms(atoms=bad_configs, filename='config_single.xyz')
-                      sys.exit()
-                   continue
+                #if single_atom(self.atoms, self.atoms.get_positions(), 5.0):
+                #   bad_numb += 1
+                #   bad_configs.append(self.atoms.copy())
+                #   if bad_numb > 20:
+                #      self.dump_atoms(atoms=bad_configs, filename='config_single.xyz')
+                #      sys.exit()
+                #   continue
                 #check if the new configuration was visited
                 if self.match_structure:
                    self.repeated, self.state = self.config_memo(state)
@@ -322,7 +324,7 @@ class BasinHopping(Dynamics):
                 if Uo < self.minenergy:
                     break
         print "Basin Hopping completed successfully!"
-        return self.visited_configs, self.dr
+        return self.visited_configs, self.dr, self.Umin
 
     def adjust_step(self, step):
         self.ratio = float(self.acceptnumb)/float(step+2)
@@ -385,7 +387,7 @@ class BasinHopping(Dynamics):
         exafs_log.close()
 
     def log_time(self, state, readtime, matchtime, count):
-        self.time_logger.write("{:>10}{:12.6f}{:12.6f}{:>d}\n".format
+        self.time_logger.write("{:>10}{:12.6f}{:12.6f}{:>10d}\n".format
                                 (state, readtime, matchtime, count))
         #self.time_logger.write(" %s %15.6f %15.6f %d\n" %
         #                        (state, readtime, matchtime, count))

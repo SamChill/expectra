@@ -121,6 +121,7 @@ def read_lammps_trj(filename=None, skip=0, every=1, specorder=None):
         
         #skip geometries
         if itrj < skip:
+        #if count < skip:
 #           print '%4d is jumped' % itrj
            for i in range(n_atoms + 5):
                line = f.readline()

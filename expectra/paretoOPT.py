@@ -58,7 +58,9 @@ class ParetoLineOptimize(Dynamics):
 
         if isinstance(self.log_paretoLine, str):
             self.log_paretoLine = open(self.log_paretoLine, 'w')
-
+        
+        self.configs_output = open('visited_configs.dat', 'w')
+        self.new_configs_output = open('new_configs.dat', 'w')
         #if isinstance(log_paretoAtoms, str):
         #    self.log_paretoAtoms = Trajectory(self.log_paretoAtoms,
         #                                          'w', atoms)
@@ -90,6 +92,7 @@ class ParetoLineOptimize(Dynamics):
         pareto_base = []
         images = []
         atoms_state = None
+        Umin = 1.0e32
         E_factor = None
         S_factor = None
         for i in range (nnode):
@@ -100,11 +103,14 @@ class ParetoLineOptimize(Dynamics):
             dr_list.append(self.dr)
         alpha_list.append(1.0)
 
-        debug = open("visited_history",'w')
+        #debug = open("visited_history",'w')
         
         for step in range(steps):
             total_prob = 0.0
             alpha = []
+            self.configs_output.write("pareto_step: %d\n" % (step))
+            self.new_configs_output.write("pareto_step: %d\n" % (step))
+            self.debug.write("pareto_step: %d\n" % (step))
             #if step == 0:
             #   bh_steps = self.bh_steps_0
             #else:
@@ -146,13 +152,12 @@ class ParetoLineOptimize(Dynamics):
 
                 if step != 0:
                    if self.sample_method == 'pl_sample':
-                      atoms = self.paretoLine_sample(alpha[i], scale_ratio)
+                      atoms, atoms_state = self.paretoLine_sample(alpha[i], scale_ratio)
                    elif self.sample_method == 'boltzmann':
                       atoms, atoms_state = self.boltzmann_sample(alpha[i], scale_ratio)
                     
                 print "BasinHopping cycle ", i, "alpha:", alpha[i], "step size", dr_list[i]
                 #run BasinHopping
-                #define file names used to store data
                 pareto_step = str(step)
                 node_numb = str(i)
                 opt = BasinHopping(atoms=atoms,
@@ -167,16 +172,15 @@ class ParetoLineOptimize(Dynamics):
                                    exafs_calculator = self.exafs_calculator,
                                    #Switch or modify elements in structures
                                    visited_configs = self.visited_configs.copy(),
+                                   Umin =Umin,
                                    **self.parameters
                                    )
                 #old configs visited
                 configs_o = self.visited_configs.copy()
                 #updated configs after current bh runs
-                new_configs, dr_list[i] = opt.run(self.bh_steps)
+                new_configs, dr_list[i], Umin = opt.run(self.bh_steps)
+                print 'Umin:', Umin
                 self.visited_configs.update(new_configs.copy())
-                print "configs_o:", configs_o
-                print "new_configs:", new_configs
-                print "updated configs_o:", self.visited_configs
                 #new configs visited in current bh runs
                 configs_n = self.differ_configs(configs_o)
 
@@ -198,6 +202,7 @@ class ParetoLineOptimize(Dynamics):
                 accepted_numb = 0
                 self.log_paretoLine.write("==============================================\n")
                 self.log_paretoLine.write("%s: %d, %s: %d\n" % ("pl_cycle", step, "node", i))
+                self.log_paretoLine.flush()
                 for state in configs_n:
                     dot = [configs_n[state][0], configs_n[state][1]]
                     dots.append(dot)
@@ -237,6 +242,15 @@ class ParetoLineOptimize(Dynamics):
                    temp = temp + accept_ratio[i] / total_prob 
                    prob[i] = temp
             print "Probablility:", prob
+            self.debug.flush()
+            for (key, value) in configs_n.iteritems():
+                self.new_configs_output.write("%s  %15.6f  %15.6f\n"%(key, value[0], value[1]))
+            self.new_configs_output.flush()
+
+            for (key, value) in self.visited_configs.iteritems():
+                self.configs_output.write("%s  %15.6f  %15.6f  %d\n"%(key, value[0], value[1], value[3]))
+            self.configs_output.flush()
+
         if self.pareto_atoms is None:
            print "Something wrong on pareto_atoms", type(self.pareto_atoms)
         else:
@@ -244,10 +258,8 @@ class ParetoLineOptimize(Dynamics):
            print(self.pareto_atoms[0])
 
            write_atoms(self.log_paretoAtoms, self.pareto_atoms)
-        configs_output = open('visited_configs.dat', 'w')
-        for (key, value) in self.visited_configs.iteritems():
-            configs_output.write("%s  %15.6f  %15.6f  %d\n"%(key, value[0], value[1], value[3]))
-        configs_output.close()
+        print "ParetoOPT job is completed successfully"
+        self.configs_output.close()
 #        for atoms in pareto_atoms:
 #            self.log_paretoAtoms.write(atoms)
      
@@ -302,7 +314,7 @@ class ParetoLineOptimize(Dynamics):
                atoms[0].set_pbc(self.pbc)
                configs_n[key][3]= atoms[0]
                continue
-            if cmp(self.visited_configs[key], configs_o[key])!=0:
+            if cmp(self.visited_configs[key][3], configs_o[key][3])!=0:
                configs_n[key] = copy.deepcopy(self.visited_configs.get(key))
                atoms = read_atoms(filename=self.configs_dir+'/'+key)
                atoms[0].set_cell(self.cell)
@@ -635,15 +647,19 @@ class ParetoLineOptimize(Dynamics):
     def paretoLine_sample(self, alpha, beta):
         pareto_line = self.pareto_line 
         pareto_atoms = self.pareto_atoms
+        pareto_states = self.pareto_state
         for j in range (len(pareto_line)):
            U = (1.0-alpha) * (pareto_line[j][0]) + alpha * beta * pareto_line[j][1]
            if j == 0:
               Umin = U
               atoms = pareto_atoms[0]
+              state = pareto_states[0]
            elif U < Umin:
               Umin = U
               atoms = pareto_atoms[j]
-        #atoms from pareto_atoms has no pbc. This bug is to be fixed
-        atoms.set_cell([[80,0,0],[0,80,0],[0,0,80]],scale_atoms=False,fix=None)
-        return atoms
+              state = pareto_states[j]
+        #atoms.set_cell([[80,0,0],[0,80,0],[0,0,80]],scale_atoms=False,fix=None)
+        atoms.set_cell(self.cell)
+        atoms.set_pbc(self.pbc)
+        return atoms, state
 

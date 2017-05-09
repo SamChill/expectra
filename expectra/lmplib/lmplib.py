@@ -14,7 +14,7 @@ from lammps import lammps
 from ase.calculators.calculator import Calculator
 from ase.units import GPa
 import ctypes, sys
-
+import time
 # TODO
 # 1. should we make a new lammps object each time ?
 # 2. upper triangular test does not look good
@@ -248,6 +248,8 @@ End LAMMPSlib Interface Documentation
             print "atoms.rotate(cell[1], 'y', center=(0, 0, 0), rotate_cell=True)"
             print "'''"
             raise
+        #self.time_logger = open("lmplib_time.dat", 'w')
+        #self.time_logger.write('{}  {}  {}\n'.format('prepareTime','lmpRunTime','propExtractTime'))
         self.initialize_lammps(atoms)
 
         # xph: save screen output to out_screen. If comb3 used, "screen none" crushes.
@@ -283,6 +285,8 @@ End LAMMPSlib Interface Documentation
             'pbc', 'charges' and 'magmoms'.
         """
         # xph: self.atoms is saved in Calculator.calculate
+        #starttime=time.time()
+
         Calculator.calculate(self, atoms, properties, system_changes)
         if len(system_changes) == 0:
             return
@@ -312,10 +316,14 @@ End LAMMPSlib Interface Documentation
             (ctypes.c_double * len(lmp_positions))(*lmp_positions)
 #        self.lmp.put_coosrds(lmp_c_positions)
         self.lmp.scatter_atoms('x', 1, 3, lmp_c_positions)
-
+        
+        #preparetime = time.time()
         # Run for 0 time to calculate
-        self.lmp.command('run 20000')
-
+        
+        self.lmp.command('run 1 pre no post no')
+        #self.lmp.command('run 0')
+        
+        #lmp_time = time.time()
         # Extract the forces and energy
 #        if 'energy' in properties:
         self.results['energy'] = self.lmp.extract_variable('pe', None, 0)
@@ -345,6 +353,10 @@ End LAMMPSlib Interface Documentation
 
         if not self.parameters.keep_alive:
             self.lmp.close()
+        
+        #extract_time=time.time()
+        #self.time_logger.write('{:10.8f}  {:10.8f}  {:10.8f}\n'.format(
+        #                        preparetime-starttime,lmp_time-preparetime,extract_time-lmp_time))
 
     def is_lower_triangular(self, mat):
         """test if 3x3 matrix is upper triangular"""
