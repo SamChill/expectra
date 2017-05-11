@@ -170,14 +170,15 @@ class BasinHopping(Dynamics):
         ro = self.atoms.get_positions()
         symbol_o = self.atoms.get_chemical_symbols()
         start_time = time.time()
+        #Calculate energy and chi for the initial structure
         #If atoms_state given, retrieve energy and chi data from visited_configs
         if self.atoms_state is not None:
+           self.state =self.atoms_state
            self.energy = self.visited_configs[self.atoms_state][0]
-           chi_o = self.visited_configs[self.atoms_state][1]
            self.chi_deviation =chi_o
            self.chi_differ = copy.deepcopy(self.visited_configs[self.atoms_state][2])
            Eo = self.energy
-           self.state =self.atoms_state
+           chi_o = self.visited_configs[self.atoms_state][1]
            Uo = (1.0 - alpha ) * Eo + alpha * scale_ratio * chi_o
         #Atoms_state not given: calculate energy and chi
         else:
@@ -210,8 +211,8 @@ class BasinHopping(Dynamics):
         recentaccept = 0
         rejectnum = 0
         for step in range(steps):
-            bad_numb = 0
-            bad_configs = []
+            #bad_numb = 0
+            #bad_configs = []
             self.md_run_time = 0.0
             Un = None
             self.chi_differ = []
@@ -227,7 +228,6 @@ class BasinHopping(Dynamics):
                    print 'move atoms'
                    rn = self.move(ro)
                    symbol_n = symbol_o
-                   #print rn
                 start_time = time.time()
                 En = self.get_energy(rn, symbol_n)
                 #if single_atom(self.atoms, self.atoms.get_positions(), 5.0):
@@ -521,14 +521,17 @@ class BasinHopping(Dynamics):
                if state == new_state:
                   continue
                if abs(self.energy - self.visited_configs[state][0]) < self.comp_eps_e:
-                  traj_file = self.configs_dir + '/' +state
                   starttime = time.time()
-                  configs = read_atoms(filename=traj_file)
-                  config_o = configs[0]
+                  if in_memory_mode:
+                     config_o = self.visited_configs[state][4]
+                  else:
+                     traj_file = self.configs_dir + '/' +state
+                     configs = read_atoms(filename=traj_file)
+                     config_o = configs[0]
+                     config_o.set_cell(self.atoms.get_cell())
+                     config_o.set_pbc(self.atoms.get_pbc())
                   donetime = time.time()
                   readtime += (donetime - starttime)
-                  config_o.set_cell(self.atoms.get_cell())
-                  config_o.set_pbc(self.atoms.get_pbc())
                
                   #If the new structure has been visited, read chi data from library
                   if match(config_o, self.atoms, self.comp_eps_r, self.cutoff, self.indistinguishable):
@@ -552,8 +555,10 @@ class BasinHopping(Dynamics):
            self.log_time(new_state, readtime, matchtime, count)
            if new_state in self.visited_configs:
               return repeated, new_state
-              
-           self.visited_configs[new_state] = [self.energy, 0.0, [0.0], 1]
+           if in_memory_mode:
+              self.visited_configs[new_state] = [self.energy, 0.0, [0.0], 1, self.atoms]
+           else:
+              self.visited_configs[new_state] = [self.energy, 0.0, [0.0], 1]
         return repeated, new_state
     
     '''Run md simulation and self.atoms will be automatically updated after each run
