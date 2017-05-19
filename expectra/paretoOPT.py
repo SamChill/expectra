@@ -79,7 +79,7 @@ class ParetoLineOptimize(Dynamics):
         self.pareto_state = []
         self.debug = open('debug', 'w')
         self.blz_sample=open('blz_sample.dat','w')
-        self.blz_sample.write("stateSelected   e_pot   chi_differ   deltaU   stateMin") 
+        self.blz_sample.write("stateSelected   e_pot   chi_differ   deltaU   stateMin\n") 
 
     def run(self, steps):
         """Hop the basins for defined number of steps."""
@@ -641,7 +641,7 @@ class ParetoLineOptimize(Dynamics):
         index = self.sample_index(p)
         if self.dots[index] in self.pareto_line:
            print 'The selected dot is on the pareto line found'
-        self.blz_sample.write("%s   %15.6f   %15.6f   %15.6f   %s" % (self.states[index], self.visited_configs[self.states[index]][0], 
+        self.blz_sample.write("%s   %15.6f   %15.6f   %15.6f   %s\n" % (self.states[index], self.visited_configs[self.states[index]][0], 
                               self.visited_configs[self.states[index]][1], U[index], self.states[min_index]))
         self.blz_sample.flush()
         if self.in_memory_mode:

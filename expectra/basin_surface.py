@@ -252,7 +252,7 @@ class BasinHopping(Dynamics):
                          #The new structure can not be stabilized via MD simulation, go back to while loop
                          #self.visited_configs[state][1] = None
                          #self.visited_configs[state][2] = None
-                         self.visited_configs.pop(self.state)
+                         #self.visited_configs.pop(self.state)
                          print 'the structure is not stabilized. move atoms again'
                          continue
                       #update Energy and Chi data
@@ -506,7 +506,7 @@ class BasinHopping(Dynamics):
         print 'get_minimum',self.Umin
         return self.Umin, atoms
   
-    def config_memo(self, new_state):
+    def config_memo(self, new_state, md_opt_cycle = False):
         """Add the new config if it is not visited before:
            Compare energies first, then compare geometries
         """
@@ -556,8 +556,10 @@ class BasinHopping(Dynamics):
         #Note: chi_deviation is not calculated yet
         if not repeated:
            self.log_time(new_state, readtime, matchtime, count)
-           if new_state in self.visited_configs:
+           if not md_opt_cycle:
               return repeated, new_state
+           #if new_state in self.visited_configs:
+           #   return repeated, new_state
            if self.in_memory_mode:
               self.visited_configs[new_state] = [self.energy, 0.0, [0.0], 1, self.atoms.copy()]
            else:
@@ -732,15 +734,15 @@ class BasinHopping(Dynamics):
            #The structure converts to a new structure during MD simulation
            #Check if it was visited or not. If visited, pop out the added state
            if md_cycle > 1 and len(self.visited_configs) > 1:
-              self.repeated, self.state = self.config_memo(state)
+              self.repeated, self.state = self.config_memo(state, md_opt_cycle=True)
               #for the situation where visited_configs was read from a database
               if state not in self.visited_configs:
                  print "state not found in visited configs"
                  return self.chi_deviation, True
 
               if self.repeated:
-                 self.visited_configs.pop(state)
-                 print self.state, 'is repeated', state, 'is poped out'
+                 #self.visited_configs.pop(state)
+                 print self.state, 'is repeated'
                  return self.chi_deviation, True
 
            if self.lammps:
