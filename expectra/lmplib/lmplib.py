@@ -320,8 +320,8 @@ End LAMMPSlib Interface Documentation
         #preparetime = time.time()
         # Run for 0 time to calculate
         
-        self.lmp.command('run 1 pre no post no')
-        #self.lmp.command('run 0')
+        #self.lmp.command('run 1 pre no post no')
+        self.lmp.command('run 0')
         
         #lmp_time = time.time()
         # Extract the forces and energy
@@ -376,7 +376,7 @@ End LAMMPSlib Interface Documentation
     def initialize_lammps(self, atoms):
         # Initialising commands
         # xph: write an input and data_file for initialization of lammps
-
+        print "initialize lammps"
         self.write_lammps_input(atoms)
         self.write_lammps_data(atoms)
 

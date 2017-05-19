@@ -175,10 +175,10 @@ class BasinHopping(Dynamics):
         if self.atoms_state is not None:
            self.state =self.atoms_state
            self.energy = self.visited_configs[self.atoms_state][0]
-           self.chi_deviation =chi_o
-           self.chi_differ = copy.deepcopy(self.visited_configs[self.atoms_state][2])
-           Eo = self.energy
            chi_o = self.visited_configs[self.atoms_state][1]
+           self.chi_differ = copy.deepcopy(self.visited_configs[self.atoms_state][2])
+           self.chi_deviation =chi_o
+           Eo = self.energy
            Uo = (1.0 - alpha ) * Eo + alpha * scale_ratio * chi_o
         #Atoms_state not given: calculate energy and chi
         else:
@@ -216,7 +216,7 @@ class BasinHopping(Dynamics):
             self.md_run_time = 0.0
             Un = None
             self.chi_differ = []
-            state = '_'.join(filter(None,[self.pareto_step, self.node_numb, str(step)]))
+            curr_state = '_'.join(filter(None,[self.pareto_step, self.node_numb, str(step)]))
 
             while Un is None:
                 if self.switch:
@@ -239,15 +239,15 @@ class BasinHopping(Dynamics):
                 #   continue
                 #check if the new configuration was visited
                 if self.match_structure:
-                   self.repeated, self.state = self.config_memo(state)
+                   self.repeated, self.state = self.config_memo(curr_state)
                 else:
                    self.repeated = False
                 print "repeated:", self.repeated
                 if self.exafs_calculator is not None:
                    if not self.repeated:
                       #Calculate exafs for new structure
-                      config_number = len(self.visited_configs) 
-                      chi_n, stabilize= self.get_chi_deviation(self.atoms.get_positions(), state)
+                      #config_number = len(self.visited_configs) 
+                      chi_n, stabilize= self.get_chi_deviation(self.atoms.get_positions(), curr_state)
                       if not stabilize:
                          #The new structure can not be stabilized via MD simulation, go back to while loop
                          #self.visited_configs[state][1] = None
@@ -264,7 +264,6 @@ class BasinHopping(Dynamics):
                       chi_n = self.chi_deviation
                       if chi_n is None:
                          print 'none chi_n'
-                         accept =True
                          continue
                       Un =(1 - alpha) * En + alpha * scale_ratio * chi_n
                 else:
@@ -273,7 +272,7 @@ class BasinHopping(Dynamics):
 
                 self.time_stamp = time.time() - start_time
                 if not self.repeated:
-                   self.log_atoms(state, Un, chi_n)
+                   self.log_atoms(curr_state, Un, chi_n)
                 print 'Energy: ', En, 'chi_differ: ', chi_n
                 print '====================================================================='
             if Un < self.Umin:
@@ -324,7 +323,7 @@ class BasinHopping(Dynamics):
                 if Uo < self.minenergy:
                     break
         print "Basin Hopping completed successfully!"
-        return self.visited_configs, self.dr, self.Umin
+        return copy.deepcopy(self.visited_configs), self.dr, self.Umin
 
     def adjust_step(self, step):
         self.ratio = float(self.acceptnumb)/float(step+2)
@@ -522,7 +521,7 @@ class BasinHopping(Dynamics):
                   continue
                if abs(self.energy - self.visited_configs[state][0]) < self.comp_eps_e:
                   starttime = time.time()
-                  if in_memory_mode:
+                  if self.in_memory_mode:
                      config_o = self.visited_configs[state][4]
                   else:
                      traj_file = self.configs_dir + '/' +state
@@ -545,18 +544,22 @@ class BasinHopping(Dynamics):
 
                      self.log_time(new_state, readtime, matchtime, count)
 
+                     if len(state.split('_'))==1:
+                        self.visited_configs[new_state]=self.visited_configs.pop(state)
+                        return repeated, new_state
+
                      return repeated, state
                   matchtime += time.time() - donetime 
                   count += 1
 
-        #a new state is found or visited_configs is empty
+        #A new state is found or visited_configs is empty
         #Note: chi_deviation is not calculated yet
         if not repeated:
            self.log_time(new_state, readtime, matchtime, count)
            if new_state in self.visited_configs:
               return repeated, new_state
-           if in_memory_mode:
-              self.visited_configs[new_state] = [self.energy, 0.0, [0.0], 1, self.atoms]
+           if self.in_memory_mode:
+              self.visited_configs[new_state] = [self.energy, 0.0, [0.0], 1, self.atoms.copy()]
            else:
               self.visited_configs[new_state] = [self.energy, 0.0, [0.0], 1]
         return repeated, new_state
@@ -574,9 +577,10 @@ class BasinHopping(Dynamics):
         atoms_md.append(self.atoms.copy())
         MaxwellBoltzmannDistribution(atoms=self.atoms, temp=self.md_temperature)
         # We want to run MD with constant temperature with Nose thermostat
-        dyn = NPT(self.atoms, timestep=self.md_step_size,temperature=self.md_temperature,
-                  externalstress=np.array((0,0,0,0,0,0)),ttime=self.md_ttime,pfactor=None,
-                  mask=(0,0,0))
+        #dyn = NPT(self.atoms, timestep=self.md_step_size,temperature=self.md_temperature,
+        #          externalstress=np.array((0,0,0,0,0,0)),ttime=self.md_ttime,pfactor=None,
+        #          mask=(0,0,0))
+        dyn = Langevin(atoms, self.md_step_size,self.md_temperature,0.05)
         if self.in_memory_mode:
            starttime = time.time()
            def md_log(atoms=self.atoms):
@@ -589,6 +593,7 @@ class BasinHopping(Dynamics):
            dyn.run(md_steps)
            print 'time used:',time.time()-starttime
            return atoms_md, e_log
+           #for debug
            self.dump_atoms(atoms_md, 'md.xyz')
            log_e = open('md.log', 'w')
            i = 0
@@ -596,6 +601,7 @@ class BasinHopping(Dynamics):
                log_e.write("%d %15.6f %15.6f\n" %(i, e[0], e[1]))
                i+=1
            log_e.close()
+
         else:
            starttime=time.time()
            traj = Trajectory(self.md_trajectory, 'w',
@@ -609,7 +615,8 @@ class BasinHopping(Dynamics):
            print 'time used:',time.time()-starttime
 
     '''
-      run MD simulation until the structure is stabilized
+      run MD simulation until the structure is stabilized.
+      Geometry optimization is followed after each MD simulation, and self.energy and self.atoms updated each MD/OPT cycle
     '''
     def stabilize_structure(self, max_md_cycle=10):
         stabilized = False
@@ -653,7 +660,7 @@ class BasinHopping(Dynamics):
                          i+=1
                      log_e.close()
            print 'Stable:', stabilized
-        self.dump_atoms(md_atoms,'stabilize_stru.xyz')
+        #self.dump_atoms(md_atoms,'stabilize_stru.xyz')
         return stabilized, md_cycle 
 
     def get_energy(self, positions=None, symbols=None):
@@ -726,6 +733,11 @@ class BasinHopping(Dynamics):
            #Check if it was visited or not. If visited, pop out the added state
            if md_cycle > 1 and len(self.visited_configs) > 1:
               self.repeated, self.state = self.config_memo(state)
+              #for the situation where visited_configs was read from a database
+              if state not in self.visited_configs:
+                 print "state not found in visited configs"
+                 return self.chi_deviation, True
+
               if self.repeated:
                  self.visited_configs.pop(state)
                  print self.state, 'is repeated', state, 'is poped out'

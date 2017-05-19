@@ -26,7 +26,8 @@ class ParetoLineOptimize(Dynamics):
                  scale = False,
                  sample_method = 'boltzmann',
                  boltzmann_temp = 4000 *kB,
-                 mini_output = True, #minima output
+                 visited_configs = {},
+                 #mini_output = True, #minima output
                  alpha = None,
                  log_paretoLine = 'paretoLine.dat',
                  log_paretoAtoms = 'paretoAtoms.traj',
@@ -44,6 +45,7 @@ class ParetoLineOptimize(Dynamics):
         self.scale = scale
         self.sample_method = sample_method
         self.boltzmann_temp = boltzmann_temp
+        self.visited_configs = visited_configs
 
         self.alpha = alpha
         self.log_paretoLine = log_paretoLine
@@ -75,8 +77,9 @@ class ParetoLineOptimize(Dynamics):
         self.pareto_atoms = []
         self.pareto_line = []
         self.pareto_state = []
-        self.visited_configs = {}
         self.debug = open('debug', 'w')
+        self.blz_sample=open('blz_sample.dat','w')
+        self.blz_sample.write("stateSelected   e_pot   chi_differ   deltaU   stateMin") 
 
     def run(self, steps):
         """Hop the basins for defined number of steps."""
@@ -171,16 +174,17 @@ class ParetoLineOptimize(Dynamics):
                                    opt_calculator = self.opt_calculator,
                                    exafs_calculator = self.exafs_calculator,
                                    #Switch or modify elements in structures
-                                   visited_configs = self.visited_configs.copy(),
+                                   visited_configs = copy.deepcopy(self.visited_configs),
                                    Umin =Umin,
                                    **self.parameters
                                    )
                 #old configs visited
-                configs_o = self.visited_configs.copy()
+                configs_o = copy.deepcopy(self.visited_configs)
                 #updated configs after current bh runs
                 new_configs, dr_list[i], Umin = opt.run(self.bh_steps)
                 print 'Umin:', Umin
-                self.visited_configs.update(new_configs.copy())
+                #upon updating, change new_configs will not change self.visited_configs. No need to use copy
+                self.visited_configs.update(new_configs)
                 #new configs visited in current bh runs
                 configs_n = self.differ_configs(configs_o)
 
@@ -193,7 +197,7 @@ class ParetoLineOptimize(Dynamics):
                    pareto_base.append([configs_n['0_0_-1'][0], configs_n['0_0_-1'][1]])
                    self.pareto_line = copy.deepcopy(pareto_base)
                    self.pareto_state.append('0_0_-1')
-                   self.pareto_atoms.append(configs_n['0_0_-1'][3])
+                   self.pareto_atoms.append(configs_n['0_0_-1'][4])
                 #else:
                 #   dots.pop(0)
                 #   traj.pop(0)
@@ -211,7 +215,7 @@ class ParetoLineOptimize(Dynamics):
                        continue
                     promoter = self.dots_filter(pareto_base, dot)
                     if promoter:
-                       self.pareto_push(state, dot, configs_n[state][3])
+                       self.pareto_push(state, dot, configs_n[state][4])
                        accepted_numb += 1
                 print "Accepted number", accepted_numb, "dots number", len(dots)
                 if len(dots) != 0:
@@ -219,7 +223,6 @@ class ParetoLineOptimize(Dynamics):
                 else: 
                    accept_ratio[i] = 0.0
                 print "Accepted ratio: ", accept_ratio
-                #prob[i] = prob[i] + accepted_numb / len(dots)
                 total_prob = total_prob + accept_ratio[i]
                 print "Total_prob: ", total_prob
                 
@@ -309,18 +312,22 @@ class ParetoLineOptimize(Dynamics):
             if key not in configs_o:
                #visited_configs[key] is a list. need to use copy
                configs_n[key] = copy.deepcopy(self.visited_configs.get(key))
-               atoms = read_atoms(filename=self.configs_dir+'/'+key)
-               atoms[0].set_cell(self.cell)
-               atoms[0].set_pbc(self.pbc)
-               configs_n[key][3]= atoms[0]
+               if self.in_memory_mode: #Atoms information stored in self.visited_configs
+                  continue
+               atoms = read_atoms(filename=self.configs_dir+'/'+key, state_number= -1)
+               atoms.set_cell(self.cell)
+               atoms.set_pbc(self.pbc)
+               configs_n[key].append(atoms.copy())
                continue
             if cmp(self.visited_configs[key][3], configs_o[key][3])!=0:
                configs_n[key] = copy.deepcopy(self.visited_configs.get(key))
-               atoms = read_atoms(filename=self.configs_dir+'/'+key)
-               atoms[0].set_cell(self.cell)
-               atoms[0].set_pbc(self.pbc)
-               configs_n[key][3]= atoms[0]
-        return configs_n
+               if self.in_memory_mode: #Atoms information stored in self.visited_configs
+                  continue
+               atoms = read_atoms(filename=self.configs_dir+'/'+key, state_number=-1)
+               atoms.set_cell(self.cell)
+               atoms.set_pbc(self.pbc)
+               configs_n[key].append(atoms.copy())
+        return copy.deepcopy(configs_n)
                
     def dots_filter(self, pareto_line, dot):
         #To determine if the dot can push the pareto line.
@@ -634,12 +641,16 @@ class ParetoLineOptimize(Dynamics):
         index = self.sample_index(p)
         if self.dots[index] in self.pareto_line:
            print 'The selected dot is on the pareto line found'
-        print 'The dot selected for bh: ', dots[index], dots[min_index]
-        print 'atom index found: ', index, 'away from minimum:', min_index,' ', U[index]
-        atoms = read_atoms(filename=self.configs_dir + '/'+ self.states[index])
-        atoms[0].set_cell(self.cell)
-        atoms[0].set_pbc(self.pbc)
-        return atoms[0], self.states[index]
+        self.blz_sample.write("%s   %15.6f   %15.6f   %15.6f   %s" % (self.states[index], self.visited_configs[self.states[index]][0], 
+                              self.visited_configs[self.states[index]][1], U[index], self.states[min_index]))
+        self.blz_sample.flush()
+        if self.in_memory_mode:
+           atoms=self.visited_configs[self.states[index]][4].copy()
+        else:
+           atoms = read_atoms(filename=self.configs_dir + '/'+ self.states[index], state_number=-1)
+           atoms.set_cell(self.cell)
+           atoms.set_pbc(self.pbc)
+        return atoms.copy(), self.states[index]
     '''
     def pop_lowProb_dots(self,p):
         index = [i for i, v in enumerate(p) if p < 2**-52]

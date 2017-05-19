@@ -248,6 +248,7 @@ def read_atoms(filename, state_number = None, mode = None):
            if cycle == -1:
               atom_numb = int(line.split()[0])
            line = f.readline()
+           #read one particular structure assinged by state_number
            if state_number is not None:
               if cycle == state_number:
                  for i in range (atom_numb):

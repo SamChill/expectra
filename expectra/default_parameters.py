@@ -8,7 +8,7 @@ default_parameters=dict(
              move_atoms = True,
              switch = False,
              active_ratio = None, #percentage of atoms will be used to switch or modified
-             cutoff=None,
+             cutoff=3.0,
              elements_lib = None, #elements used to replace the atoms
              #Structure optimization
              optimizer=FIRE,
