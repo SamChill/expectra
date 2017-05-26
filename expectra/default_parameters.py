@@ -46,7 +46,7 @@ default_parameters=dict(
              #Structure Comparison
              indistinguishable = True,
              match_structure = False,
-             comp_eps_e = 1.e-3, #criterion to determine if two configurations are identtical in energy 
+             comp_eps_e = 2.e-3, #criterion to determine if two configurations are identtical in energy 
              comp_eps_r = 0.2, #criterion to determine if two configurations are identical in geometry
              #files to log data
              logfile='basin_log', 

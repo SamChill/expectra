@@ -24,6 +24,7 @@ class ParetoLineOptimize(Dynamics):
                  bh_steps = 10,
                  bh_steps_0 = 10,
                  scale = False,
+                 beta = 1.0,
                  sample_method = 'boltzmann',
                  boltzmann_temp = 4000 *kB,
                  visited_configs = {},
@@ -43,6 +44,7 @@ class ParetoLineOptimize(Dynamics):
         self.bh_steps = bh_steps
         self.bh_steps_0 = bh_steps_0
         self.scale = scale
+        self.beta = beta
         self.sample_method = sample_method
         self.boltzmann_temp = boltzmann_temp
         self.visited_configs = visited_configs
@@ -77,7 +79,7 @@ class ParetoLineOptimize(Dynamics):
         self.pareto_atoms = []
         self.pareto_line = []
         self.pareto_state = []
-        self.debug = open('debug', 'w')
+        #self.debug = open('debug', 'w')
         self.blz_sample=open('blz_sample.dat','w')
         self.blz_sample.write("stateSelected   e_pot   chi_differ   deltaU   stateMin\n") 
 
@@ -105,15 +107,13 @@ class ParetoLineOptimize(Dynamics):
             images.append(None)
             dr_list.append(self.dr)
         alpha_list.append(1.0)
-
-        #debug = open("visited_history",'w')
         
         for step in range(steps):
             total_prob = 0.0
             alpha = []
             self.configs_output.write("pareto_step: %d\n" % (step))
             self.new_configs_output.write("pareto_step: %d\n" % (step))
-            self.debug.write("pareto_step: %d\n" % (step))
+            #self.debug.write("pareto_step: %d\n" % (step))
             #if step == 0:
             #   bh_steps = self.bh_steps_0
             #else:
@@ -127,10 +127,10 @@ class ParetoLineOptimize(Dynamics):
                    alpha.append(self.alpha)
                    if step == 0:
                       atoms = self.atoms
-                      scale_ratio = 1.0
+                      scale_ratio = self.beta
                    else:
                       if not self.scale:
-                         scale_ratio = 1.0
+                         scale_ratio = self.beta
                       else:
                          scale_ratio = E_factor/S_factor
                 
@@ -139,10 +139,10 @@ class ParetoLineOptimize(Dynamics):
                    if step == 0:
                       index = i
                       atoms = self.atoms
-                      scale_ratio = 1.0
+                      scale_ratio = self.beta
                    else:
                       if not self.scale:
-                         scale_ratio = 1.0
+                         scale_ratio = self.beta
                          index = self.sample_index(prob)
                       else:
                          print "Scale ratio is calculated based on the current paretoLine for each paretoCycle"
@@ -245,13 +245,15 @@ class ParetoLineOptimize(Dynamics):
                    temp = temp + accept_ratio[i] / total_prob 
                    prob[i] = temp
             print "Probablility:", prob
-            self.debug.flush()
+            #self.debug.flush()
             for (key, value) in configs_n.iteritems():
                 self.new_configs_output.write("%s  %15.6f  %15.6f\n"%(key, value[0], value[1]))
             self.new_configs_output.flush()
 
             for (key, value) in self.visited_configs.iteritems():
-                self.configs_output.write("%s  %15.6f  %15.6f  %d\n"%(key, value[0], value[1], value[3]))
+                #For a given database, only record states that found in current job
+                if len(key.split('_'))>1:
+                   self.configs_output.write("%s  %15.6f  %15.6f  %d\n"%(key, value[0], value[1], value[3]))
             self.configs_output.flush()
 
         if self.pareto_atoms is None:
@@ -263,6 +265,8 @@ class ParetoLineOptimize(Dynamics):
            write_atoms(self.log_paretoAtoms, self.pareto_atoms)
         print "ParetoOPT job is completed successfully"
         self.configs_output.close()
+        if len(self.specorder)==1:
+           self.log_visited_configs()
 #        for atoms in pareto_atoms:
 #            self.log_paretoAtoms.write(atoms)
      
@@ -328,7 +332,26 @@ class ParetoLineOptimize(Dynamics):
                atoms.set_pbc(self.pbc)
                configs_n[key].append(atoms.copy())
         return copy.deepcopy(configs_n)
-               
+
+    def log_visited_configs(self):
+        data_base=self.visited_configs
+        log_database = open('new_au55_all.xyz', 'w')
+        log_exafs = open('new_au55_exafs_all.dat','w')
+        for state in data_base:
+            config =data_base[state]
+            numb_atoms=len(config[4])
+            log_database.write("%d\n"%(numb_atoms))
+            log_database.write("images: %s energy: %15.6f chi_differ: %15.6f\n"%(state, config[0], config[1]))
+            for atom in config[4]:
+                log_database.write("%s %15.6f %15.6f %15.6f\n"%(atom.symbol, atom.x, atom.y, atom.z))
+            log_database.flush()
+            log_exafs.write("images: %s\n"%(state))
+            for j in xrange(len(config[5])):
+                log_exafs.write("%12.7f  %12.7f\n"%(config[5][j], config[6][j]))
+            log_exafs.flush()
+        log_database.close()
+        log_exafs.close()
+
     def dots_filter(self, pareto_line, dot):
         #To determine if the dot can push the pareto line.
         temp = copy.deepcopy(pareto_line)
@@ -441,7 +464,7 @@ class ParetoLineOptimize(Dynamics):
             cross_f2 = self.get_cross(dot_f1, dot_f2, dot_n)
 
             if cross_b1 > 0 and cross_f1 > 0:
-               self.debug.write('%s\n' % (replace))
+               #self.debug.write('%s\n' % (replace))
                #if i == 0:
                   #'replace' has already been done in corner situation
                #   self.debug.write('%d\n' % (i))
@@ -454,13 +477,13 @@ class ParetoLineOptimize(Dynamics):
                   self.pareto_line.pop(index)
                   self.pareto_atoms.pop(index)
                   self.pareto_state.pop(index)
-                  self.debug.write('%d  %s  %d\n' % (i, 'poped',  index))
+                  #self.debug.write('%d  %s  %d\n' % (i, 'poped',  index))
                else:
                   action ='replace'
                   self.pareto_line[index] = dot_n
                   self.pareto_atoms[index] = atom_n
                   self.pareto_state[index] = state_n
-                  self.debug.write('%d  %s  %d\n' % (i, 'replaced',  index))
+                  #self.debug.write('%d  %s  %d\n' % (i, 'replaced',  index))
                   replace = True
                continue
             elif cross_b1 < 0  and cross_f1 > 0 and cross_f2 <0:
@@ -469,13 +492,13 @@ class ParetoLineOptimize(Dynamics):
                self.pareto_line.insert(index+1, dot_n)
                self.pareto_atoms.insert(index+1, atom_n)
                self.pareto_state.insert(index+1, state_n)
-               self.debug.write('%d  %s  %d\n' % (i, 'inserted',  index+1))
+               #self.debug.write('%d  %s  %d\n' % (i, 'inserted',  index+1))
                if self.pareto_line != temp:
                   self.logParetoLine(state_n, action)
                return 
             else:
                #For other situations, no acition is needed
-               self.debug.write('%d  %s  %d\n' % (i, 'nothing done',  index))
+               #self.debug.write('%d  %s  %d\n' % (i, 'nothing done',  index))
                continue
         if self.pareto_line != temp:
            self.logParetoLine(state_n, action)

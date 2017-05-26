@@ -28,7 +28,7 @@ import sys
 import os
 
 #Flush buffer after each 'print' statement so that to see redirected output imediately 
-sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
+#sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
 
 COMM_WORLD = mpi4py.MPI.COMM_WORLD
 
@@ -152,6 +152,7 @@ class BasinHopping(Dynamics):
         self.ratio = 0.0001
         self.md_run_time = 0.0
         self.md_cycle = 0
+        self.move_step = 0
         self.acceptnumb = 0
         self.recentaccept = 0
         self.repeated = False
@@ -183,21 +184,23 @@ class BasinHopping(Dynamics):
         #Atoms_state not given: calculate energy and chi
         else:
            Eo = self.get_energy(ro, symbol_o)
-        
            state = '_'.join(filter(None,[self.pareto_step, self.node_numb, str(-1)]))
-           
+           if self.match_structure:
+              self.repeated, self.state = self.config_memo(state)
            if self.exafs_calculator is not None:
-              chi_o, stablize = self.get_chi_deviation(ro, state)
-              print chi_o, stablize
+              if self.repeated:
+                 chi_o = self.visited_configs[self.state][1]
+                 self.chi_differ = copy.deepcopy(self.visited_configs[self.state][2])
+              else:
+                 chi_o, stabilize = self.get_chi_deviation(self.atoms.get_positions(), state)
+                 self.visited_configs[self.state][1] = chi_o
+                 self.visited_configs[self.state][2] = copy.deepcopy(self.chi_differ)
+              print chi_o
               Uo = (1.0 - alpha ) * Eo + alpha * scale_ratio * chi_o
            else:
               Uo = Eo
               chi_o = 0.0
               self.chi_differ.append(0.0)
-           if self.match_structure:
-              self.repeated, self.state = self.config_memo(state)
-              self.visited_configs[self.state][1] = chi_o
-              self.visited_configs[self.state][2] = copy.deepcopy(self.chi_differ)
            self.log_atoms(state, Uo, chi_o)
            self.Umin =Uo
         print 'Energy: ', Eo, 'chi_differ: ', chi_o
@@ -214,11 +217,15 @@ class BasinHopping(Dynamics):
             #bad_numb = 0
             #bad_configs = []
             self.md_run_time = 0.0
+            self.md_cycle = 0
+            self.move_step = 0
             Un = None
             self.chi_differ = []
             curr_state = '_'.join(filter(None,[self.pareto_step, self.node_numb, str(step)]))
 
+            start_time = time.time()
             while Un is None:
+                self.move_step += 1
                 if self.switch:
                    #symbol_n = switch_elements(self.atoms, symbol_o, self.cutoff)
                    symbol_n = self.random_swap(symbol_o)
@@ -228,7 +235,6 @@ class BasinHopping(Dynamics):
                    print 'move atoms'
                    rn = self.move(ro)
                    symbol_n = symbol_o
-                start_time = time.time()
                 En = self.get_energy(rn, symbol_n)
                 #if single_atom(self.atoms, self.atoms.get_positions(), 5.0):
                 #   bad_numb += 1
@@ -246,13 +252,9 @@ class BasinHopping(Dynamics):
                 if self.exafs_calculator is not None:
                    if not self.repeated:
                       #Calculate exafs for new structure
-                      #config_number = len(self.visited_configs) 
                       chi_n, stabilize= self.get_chi_deviation(self.atoms.get_positions(), curr_state)
                       if not stabilize:
                          #The new structure can not be stabilized via MD simulation, go back to while loop
-                         #self.visited_configs[state][1] = None
-                         #self.visited_configs[state][2] = None
-                         #self.visited_configs.pop(self.state)
                          print 'the structure is not stabilized. move atoms again'
                          continue
                       #update Energy and Chi data
@@ -344,38 +346,47 @@ class BasinHopping(Dynamics):
                       self.dr = self.dr * (1+self.adjust_fraction)
                       if self.adjust_temperature:
                          self.kT = self.kT * (1 - self.temp_adjust_fraction)
-                      if self.switch:
-                         self.active_ratio = self.active_ratio * (1-self.adjust_fraction)
+                      #if self.switch:
+                      #   self.active_ratio = self.active_ratio * (1-self.adjust_fraction)
                    elif ratio < self.target_ratio:
                        self.dr = self.dr * (1-self.adjust_fraction)
                        if self.adjust_temperature:
                           self.kT = self.kT * (1 + self.temp_adjust_fraction)
-                       if self.switch:
-                          self.active_ratio = self.active_ratio * (1+self.adjust_fraction)
+                       #if self.switch:
+                       #   self.active_ratio = self.active_ratio * (1+self.adjust_fraction)
         
     def log(self, step, accept, state, alpha, En, chi_differ, Un, Umin):
         if self.logfile is None:
             return
+        temp_chi = '   '.join(map(str, chi_differ))
         if step == -1:
-           self.logfile.write('#{:10s}: {:s} {:s} {:12s} {:12s} {:12s} {:12s} {:12s} {:12s} {:12s} {:6s} {:12s} {:12s}\n'.format(
-                                  "name", "step", "accept", "state", "acc_ratio", "alpha", 
-                                  "energy","chi_deviation", "chi", "pseudoPot", "Umin", "MD/opt", "time"))
+           self.logfile.write('#{:11s}: {:4s} {:5s} {:12s} {:8s} {:5s} {:15s} {:15s} {:15s} {:15s} {:15s} {:5s} {:8s} {:8s}\n'.format(
+                                  "name", "step", "accept", "state", "accRatio", "alpha", 
+                                  "energy","chi_deviation", "chi", "pseudoPot", "Umin","dr","MD/opt", "Tottime"))
            
         name = self.__class__.__name__
-        temp_chi = '   '.join(map(str, chi_differ))
         #keep En and self.chi_deviation at Column 6 and Column 7 (start from 0).
         #otherwise, need to change read_dots in io.py
         if self.exafs_calculator is None:
-           self.logfile.write('%s: %d  %d  %s %10.2f  %15.6f  %15.6f  %15.6f  %15.6f  %8.4f  %8.4f %8.4f\n'
-                              % (name, step, accept, state, self.active_ratio, alpha, 
-                              En, Un, Umin, self.dr, self.ratio, self.time_stamp))
+           self.logfile.write('{:12s}: {:4d} {:5d} {:12s} {:8.6f} {:5.4f} {:15.6f} {:15.6f} {:15.6f} {:5.4f} {:8.4f}\n'.format(
+                              name, step, accept, state, self.ratio, alpha, 
+                              En, Un, Umin, self.dr, self.time_stamp))
         else:
-           self.logfile.write('%s: %2d  %d  %s %3.2f  %4.3f  %15.6f  %15.6f  %s  %15.6f  %15.6f  %5.4f   %d %8.4f %8.4f\n'
-                              % (name, step, accept, state, self.ratio, alpha, 
-                              En, self.chi_deviation, temp_chi, Un, Umin, self.dr, self.md_cycle, self.md_run_time, self.time_stamp))
+           self.logfile.write('{:12s}: {:4d} {:5d} {:12s} {:8.6f} {:5.4f} {:15.6f} {:15.6f} {:15s} {:15.6f} {:15.6f} {:5.4f} {:2d} {:4d} {:8.4f} {:8.4f}\n'.format(
+                              name, step, accept, state, self.ratio, alpha, 
+                              En, self.chi_deviation, temp_chi, Un, Umin, 
+                              self.dr, self.md_cycle, self.move_step, self.md_run_time, self.time_stamp))
         self.logfile.flush()
 
     def log_exafs(self, state, absorber, chi_deviation):
+        #in_memory_mode for bimetallic will not store exafs but output it
+        if self.in_memory_mode and len(self.specorder)==1:
+           if len(self.visited_configs[self.state]) > 5:
+              print "something wrong with config_memo"
+              sys.exit()
+           self.visited_configs[self.state].append(self.k)
+           self.visited_configs[self.state].append(self.chi)
+           return
         exafs_log = open(self.exafs_dir+'/'+state+'_'+absorber,'w')
         exafs_log.write("state: %s absorber: %s energy: %15.6f chi_differ: %15.6f\n" % 
                         (state, absorber, self.energy, chi_deviation))
@@ -386,13 +397,21 @@ class BasinHopping(Dynamics):
         exafs_log.close()
 
     def log_time(self, state, readtime, matchtime, count):
-        self.time_logger.write("{:>10}{:12.6f}{:12.6f}{:>10d}\n".format
-                                (state, readtime, matchtime, count))
+        if count == 0:
+           self.time_logger.write("{:>10}{:12.6f}{:12.6f}{:>10d}{:12.6f}\n".format
+                                   (state, readtime, matchtime, count, matchtime))
+        else:
+           self.time_logger.write("{:>10}{:12.6f}{:12.6f}{:>10d}{:12.6f}\n".format
+                                   (state, readtime, matchtime, count, matchtime/float(count)))
         #self.time_logger.write(" %s %15.6f %15.6f %d\n" %
         #                        (state, readtime, matchtime, count))
         self.time_logger.flush() 
 
-    def log_atoms(self,state, Un, chi_differ):
+    def log_atoms(self, state, Un, chi_differ):
+        #in_memory_mode for bimetallic will store and output atoms
+        if self.in_memory_mode and len(self.specorder)==1:
+           self.visited_configs[self.state][4] = self.atoms.copy()
+           return
         output_atoms = open(self.configs_dir+'/'+state,'w')
         output_atoms.write("%d\n" % (len(self.atoms)))
         output_atoms.write("state: %s  potential: %15.6f chi_differ: %15.6f \n"
@@ -440,11 +459,11 @@ class BasinHopping(Dynamics):
                disp = np.random.uniform(-1*self.dr, self.dr, (len(atoms), 3))
            
            #set all other disp to zero except a certain number of disp
-           if self.active_ratio is not None:
-              fix_space = len(atoms) - int(self.active_ratio * len(atoms))
-              fix_atoms = random.sample(range(len(atoms)), fix_space)
-              for i in range(len(fix_atoms)):
-                  disp[fix_atoms[i]] = (0.0, 0.0, 0.0)
+           #if self.active_ratio is not None:
+           #   fix_space = len(atoms) - int(self.active_ratio * len(atoms))
+           #   fix_atoms = random.sample(range(len(atoms)), fix_space)
+           #   for i in range(len(fix_atoms)):
+           #       disp[fix_atoms[i]] = (0.0, 0.0, 0.0)
            #donot move substrate
            if self.substrate is not None:
               for i in range(len(atoms)):
@@ -639,7 +658,9 @@ class BasinHopping(Dynamics):
               traj = read_lammps_trj(filename=md_trajectory, skip=0, specorder=self.specorder)
               self.atoms=traj[-1]
               print "------------"
-              pot_energy=self.get_energy()
+              self.get_energy()
+              pot_energy=self.energy
+              print pot_energy
            else:
               try:
                  md_traj, e_log = self.run_md(md_steps=self.md_steps)
@@ -649,6 +670,9 @@ class BasinHopping(Dynamics):
                  print "MD Error"
                  sys.exit()
            md_cycle += 1
+           #TODO: stabilization for large system 
+           if len(self.atoms)>500:
+              stabilized = True
            if abs(pot_energy - pot_energy_old)<self.comp_eps_e:
               match_results = match(self.atoms, atoms_initial, self.comp_eps_r, 3.0, self.indistinguishable)
               if match_results:
@@ -723,7 +747,7 @@ class BasinHopping(Dynamics):
            print "Warning: exafs is not calculated. Only energy used for basin hopping"
            self.chi_deviation = 0.0
            return 0.0
-
+        #Stabilize Structure before exafs calculation
         if self.md:
            starttime = time.time()
            stabilize, md_cycle = self.stabilize_structure(self.max_md_cycle)
@@ -731,15 +755,23 @@ class BasinHopping(Dynamics):
            self.md_run_time = time.time()-starttime
            if not stabilize:
               return None, stabilize
-           #The structure converts to a new structure during MD simulation
-           #Check if it was visited or not. If visited, pop out the added state
-           if md_cycle > 1 and len(self.visited_configs) > 1:
+           #Corner situation: structure is stabilized in 1 cycle. Same to initial structure
+           #No need to check if visited. Structure was not recorded after geo_opt
+           #For single-element composition
+           if md_cycle == 1 and len(self.specorder)==1:
+              if self.in_memory_mode:
+                 self.visited_configs[state] = [self.energy, 0.0, [0.0], 1, self.atoms.copy()]
+              else:
+                 self.visited_configs[state] = [self.energy, 0.0, [0.0], 1]
+              
+           #The structure converts to a new structure during MD simulation OR for two-element systems
+           #Check if it was visited or not. If visited, return chi_deviations
+           if md_cycle > 1 or len(self.specorder)>1:
               self.repeated, self.state = self.config_memo(state, md_opt_cycle=True)
               #for the situation where visited_configs was read from a database
-              if state not in self.visited_configs:
-                 print "state not found in visited configs"
-                 return self.chi_deviation, True
-
+              #if state not in self.visited_configs:
+              #   print "state not found in visited configs"
+              #   return self.chi_deviation, True
               if self.repeated:
                  #self.visited_configs.pop(state)
                  print self.state, 'is repeated'
@@ -770,7 +802,7 @@ class BasinHopping(Dynamics):
                    #os.system(cp_cmd)
                    i+=1
                    self.log_exafs(state, calc.get_absorber(), chi_deviation)
-                   self.chi_differ.append(chi_deviation)
+                   self.chi_differ.append(round(chi_deviation, 6))
             else:
                if self.md:
                   print 'MD trajectories are used'
@@ -786,6 +818,8 @@ class BasinHopping(Dynamics):
         except:
             # Something went wrong.
             # In GPAW the atoms are probably to near to each other.
+            print "Something wrong with exafs calculation"
+            sys.exit()
             return None, False
    
         return self.chi_deviation, True

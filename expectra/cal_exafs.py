@@ -101,7 +101,7 @@ class Expectra(Calculator):
         every = 1,
         exp_file = 'chi_exp.dat',
         #Following parameters used for xafsft to calculate g_r plot
-        real_space = True,
+        real_space = False,
         calc_type = 'area',
         average = False, #if true, the curve difference will be averaged by the number of dots
         kweight= 2,
@@ -259,5 +259,4 @@ class Expectra(Calculator):
         if parameters.real_space:
             self.area_diff = calc_area(y_exp, y_thy, calc_type = parameters.calc_type, average = parameters.average)
         else:
-            #need debug
             self.area_diff = calc_area(y_exp, y_thy)
