@@ -1,0 +1,106 @@
+#!/usr/bin/env python
+import mpi4py.MPI
+
+import argparse
+import sys
+
+import numpy
+
+from expectra.exafs import exafs_first_shell, exafs_multiple_scattering
+from expectra.io import read_xdatcar, read_con, read_traj
+from ase.io.trajectory import Trajectory
+from expectra.lammps_caller import read_lammps_trj
+from ase.io import read
+
+sys.setrecursionlimit(10000)
+
+COMM_WORLD = mpi4py.MPI.COMM_WORLD
+
+def mpiexcepthook(type, value, traceback):
+    sys.__excepthook__(type, value, traceback)
+    sys.stderr.write("exception occured on rank %i\n" % COMM_WORLD.rank)
+    COMM_WORLD.Abort()
+sys.excepthook = mpiexcepthook
+
+class expectra:
+    def __int__ (self, 
+                 first_shell,
+                 neighbor_cutoff = 3.4,
+                 multiple_scattering = True,
+                 rmax = 6.0,
+                 s02 = 1.0,
+                 energy_shift = 0.0,
+                 sig2 = 0.0,
+                 absorber,
+                 ignore_elements,
+                 specorder,
+                 edge,
+                 skip,
+                 every,
+                 trajectories
+                 )
+     
+        self.first_shell = first_shell
+        self.neighbor_cutoff = neighbor_cutoff
+        self.multiple_scattering = multiple_scattering
+        self.rmax = rmax
+        self.s02 = s02
+        self.energy_shift = energy_shift
+        self.sig2 = sig2
+        self.absorber = absorber
+        self.ignore_elements = ignore_elements
+        self.specorder = specorder
+        self.edge = edge
+        self.skip = skip
+        self.every = every
+        self.trajectories = trajectories
+
+    def calculate(self):
+        trajectory = COMM_WORLD.bcast(self.trajectories)
+#        print type(trajectory[0])
+#        print trajectory[0]
+        args.absorber = self.get_default_absorber(trajectory[0])
+        
+        k, chi = exafs_trajectory(args, trajectory)
+        #save_result(k, chi)
+
+    def get_default_absorber(self, atoms):
+        symbols = set(atoms.get_chemical_symbols())
+        if self.absorber:
+            if self.absorber not in symbols:
+                print 'ERROR: --absorber %s is not in the system' % self.absorber
+                sys.exit(2)
+            else:
+                return self.absorber
+        if self.ignore_elements:
+            symbols -= set(self.ignore_elements)
+        if len(symbols) == 1:
+            return list(symbols)[0]
+        else:
+            print 'ERROR: must specify --absorber if more than one chemical specie'
+            sys.exit(2)
+
+    def exafs_trajectory(args, trajectory):
+        if args.multiple_scattering:
+            k, chi = exafs_multiple_scattering(args.S02, args.energy_shift, 
+                    args.absorber, args.ignore_elements, args.edge, args.rmax,
+                    args.sig2,
+                    trajectory)
+        elif args.first_shell:
+            k, chi = exafs_first_shell(args.S02, args.energy_shift, 
+                    args.absorber, args.ignore_elements, args.edge, 
+                    args.neighbor_cutoff, args.sig2, trajectory)
+    
+        return k, chi
+
+def save_result(k, chi):
+    if COMM_WORLD.rank != 0: return
+    print 'saving result to chi.dat'
+    f = open('chi.dat', 'w')
+    for i in xrange(len(k)):
+        f.write("%6.3f %16.8e\n" % (k[i], chi[i]))
+    f.close()
+
+
+if __name__ == '__main__':
+    main()

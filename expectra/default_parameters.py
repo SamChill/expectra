@@ -6,6 +6,7 @@ from ase.optimize.lbfgs import LBFGS
 default_parameters=dict(
              #Switch or modify elements in structures
              move_atoms = True,
+             dr_min = 0.1,  #reset dr if dr becomes smaller than dr_min
              switch = False,
              active_ratio = None, #percentage of atoms will be used to switch or modified
              cutoff=3.0,

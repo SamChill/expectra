@@ -67,6 +67,7 @@ class BasinHopping(Dynamics):
                  ):
         self.atoms_state = atoms_state
         self.dr = dr
+        self.dr_reset = dr
         self.alpha = alpha
         self.scale_ratio = scale_ratio
         self.pareto_step = pareto_step
@@ -234,7 +235,8 @@ class BasinHopping(Dynamics):
                    print '==========='
                    print 'move atoms'
                    rn = self.move(ro)
-                   symbol_n = symbol_o
+                   if not self.switch:
+                      symbol_n = symbol_o
                 En = self.get_energy(rn, symbol_n)
                 #if single_atom(self.atoms, self.atoms.get_positions(), 5.0):
                 #   bad_numb += 1
@@ -342,6 +344,10 @@ class BasinHopping(Dynamics):
                    self.dr = self.dr * self.ratio/self.target_ratio
 
                 if ratio is not None:
+                   #reset dr if self.dr is too small
+                   if self.dr < self.dr_min:
+                      self.dr = self.dr_reset
+                      return
                    if ratio > self.target_ratio:
                       self.dr = self.dr * (1+self.adjust_fraction)
                       if self.adjust_temperature:
