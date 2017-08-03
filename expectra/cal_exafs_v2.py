@@ -1,4 +1,5 @@
 import numpy
+import mpi4py.MPI
 
 import argparse
 import sys
@@ -8,11 +9,26 @@ from expectra.exafs import exafs_first_shell, exafs_multiple_scattering
 from expectra.io import read_xdatcar, read_con, read_chi
 from ase.calculators.calculator import Calculator, all_changes, Parameters
 from ase import Atoms
+from ase.io import read
 from ase.io.vasp import write_vasp
 from expectra.feff import load_chi_dat
+from ase.io.trajectory import Trajectory
+from expectra.lammps_caller import read_lammps_trj
+
+sys.setrecursionlimit(10000)
+
+COMM_WORLD = mpi4py.MPI.COMM_WORLD
+
+def mpiexcepthook(type, value, traceback):
+    sys.__excepthook__(type, value, traceback)
+    sys.stderr.write("exception occured on rank %i\n" % COMM_WORLD.rank)
+    COMM_WORLD.Abort()
+sys.excepthook = mpiexcepthook
 
 def save_result(k, chi, filename):
-    print 'saving rescaled experimental chi data'
+    if COMM_WORLD.rank != 0: return
+    #print 'saving rescaled experimental chi data'
+    print 'saving result to chi.dat'
     f = open(filename, 'w')
     for i in xrange(len(k)):
         f.write("%6.3f %16.8e\n" % (k[i], chi[i]))
@@ -88,8 +104,10 @@ class Expectra(Calculator):
 
     default_parameters = dict(
         #Following parameters used for expectra to calculate exafs
+        trajectory = [],
         ncore = 1,
         multiple_scattering = ' ',
+        first_shell = False,
         ignore_elements = None,
         neighbor_cutoff = 6.0,
         S02 = 0.89,
@@ -172,7 +190,61 @@ class Expectra(Calculator):
     def calculate(self, atoms=None, properties=None):
 
         parameters = self.parameters
-        
+
+        if parameters.multiple_scattering == True:
+            parameters.first_shell = False
+      
+        trajectory = []
+        trajectory = parameters.trajectory[parameters.skip::parameters.every]
+        print '%4i configurations are received' % (len(trajectory))
+        trajectory = COMM_WORLD.bcast(trajectory)
+        parameters.absorber = get_default_absorber(trajectory[0], parameters)
+      
+        k, chi = exafs_trajectory(parameters, trajectory)
+        save_result(k, chi, 'chi.dat')
+
+def get_default_absorber(atoms, args):
+    symbols = set(atoms.get_chemical_symbols())
+    if args.absorber:
+        if args.absorber not in symbols:
+            print 'ERROR: --absorber %s is not in the system' % args.absorber
+            sys.exit(2)
+        else:
+            return args.absorber
+    if args.ignore_elements:
+        symbols -= set(args.ignore_elements)
+    if len(symbols) == 1:
+        return list(symbols)[0]
+    else:
+        print 'ERROR: must specify --absorber if more than one chemical specie'
+        sys.exit(2)
+
+def exafs_trajectory(args, trajectory):
+    if args.multiple_scattering:
+        k, chi = exafs_multiple_scattering(args.S02, args.energy_shift, 
+                args.absorber, args.ignore_elements, args.edge, args.rmax,
+                args.sig2,
+                trajectory)
+    elif args.first_shell:
+        k, chi = exafs_first_shell(args.S02, args.energy_shift, 
+                args.absorber, args.ignore_elements, args.edge, 
+                args.neighbor_cutoff, args.sig2, trajectory)
+
+    return k, chi
+
+if __name__ == '__main__':
+    main()
+
+
+
+
+
+
+
+
+
+
+
         #write geoemtry file 'con' if trajectory file doesn't exist
         if self.traj_filename is None:
            self.traj_filename = 'CONCAR'

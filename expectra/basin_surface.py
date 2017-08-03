@@ -186,13 +186,15 @@ class BasinHopping(Dynamics):
         else:
            Eo = self.get_energy(ro, symbol_o)
            state = '_'.join(filter(None,[self.pareto_step, self.node_numb, str(-1)]))
-           if self.match_structure:
-              self.repeated, self.state = self.config_memo(state)
+           #if self.match_structure:
+           #the function (match structure or not) moves to 'config_memo' function
+           self.repeated, self.state = self.config_memo(state)
            if self.exafs_calculator is not None:
               if self.repeated:
                  chi_o = self.visited_configs[self.state][1]
                  self.chi_differ = copy.deepcopy(self.visited_configs[self.state][2])
               else:
+                 print "calculate exafs for initial structure"
                  chi_o, stabilize = self.get_chi_deviation(self.atoms.get_positions(), state)
                  self.visited_configs[self.state][1] = chi_o
                  self.visited_configs[self.state][2] = copy.deepcopy(self.chi_differ)
@@ -246,10 +248,7 @@ class BasinHopping(Dynamics):
                 #      sys.exit()
                 #   continue
                 #check if the new configuration was visited
-                if self.match_structure:
-                   self.repeated, self.state = self.config_memo(curr_state)
-                else:
-                   self.repeated = False
+                self.repeated, self.state = self.config_memo(curr_state)
                 print "repeated:", self.repeated
                 if self.exafs_calculator is not None:
                    if not self.repeated:
@@ -493,6 +492,7 @@ class BasinHopping(Dynamics):
         rn = atoms.get_positions()
         world.broadcast(rn, 0)
         atoms.set_positions(rn)
+        #self.dump_atoms(md_atoms,'generated_stru.xyz')
         return atoms.get_positions()
 
     def random_swap(self, symbols):
@@ -539,7 +539,7 @@ class BasinHopping(Dynamics):
         count = 0
         readtime = 0.0
         matchtime = 0.0
-        if self.visited_configs:
+        if self.visited_configs and self.match_structure:
            for state in self.visited_configs:
                #For a new state, the structure is not stored yet and also no need to compare
                if state == new_state:
@@ -581,7 +581,7 @@ class BasinHopping(Dynamics):
         #Note: chi_deviation is not calculated yet
         if not repeated:
            self.log_time(new_state, readtime, matchtime, count)
-           if not md_opt_cycle:
+           if not md_opt_cycle and self.match_structure:
               return repeated, new_state
            #if new_state in self.visited_configs:
            #   return repeated, new_state
@@ -807,6 +807,7 @@ class BasinHopping(Dynamics):
                    #cp_cmd = 'cp exafs.chir '+'pdf_' + self.specorder[i] +'.chir'
                    #os.system(cp_cmd)
                    i+=1
+                   print state, calc.get_absorber(), chi_deviation
                    self.log_exafs(state, calc.get_absorber(), chi_deviation)
                    self.chi_differ.append(round(chi_deviation, 6))
             else:
