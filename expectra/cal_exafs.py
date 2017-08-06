@@ -161,10 +161,10 @@ class Expectra(Calculator):
         self.traj_filename = filename
         if properties is None:
             self.calculate(atoms, 'chi_area')
-            return self.area_diff, numpy.array(self.x), numpy.array(self.y)
+            return self.area_diff, self.x, self.y
         else:
             self.calculate(atoms, 'chi_deviation')
-            return self.chi_deviation, numpy.array(self.x), numpy.array(self.y)
+            return self.chi_deviation, self.x, self.y
 
     def get_absorber(self):
         return self.parameters.absorber
@@ -245,12 +245,11 @@ class Expectra(Calculator):
         x_exp, y_exp = match_x(x_thy, y_exp, x_exp, xmin, xmax)
         x_thy, y_thy = match_x(x_thy, y_thy, x_thy, xmin, xmax)
 
+        self.x = x_thy
+        self.y = y_thy
 
         if not parameters.real_space:
            y_thy = numpy.multiply(y_thy, numpy.power(x_thy, parameters.kweight))
-
-        self.x = x_thy
-        self.y = y_thy
 
         if parameters.debug:
            filename2 = 'rescaled_theory_chi.dat'

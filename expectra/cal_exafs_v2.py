@@ -1,3 +1,7 @@
+"""
+This version doesn't inherit from 'Calculator' superclass and treats all
+parameters as the attributes of Expectra class
+"""
 import numpy
 import mpi4py.MPI
 
@@ -12,12 +16,15 @@ from ase import Atoms
 from ase.io import read
 from ase.io.vasp import write_vasp
 from expectra.feff import load_chi_dat
+from expectra import default_parameters
 from ase.io.trajectory import Trajectory
 from expectra.lammps_caller import read_lammps_trj
 
 sys.setrecursionlimit(10000)
 
 COMM_WORLD = mpi4py.MPI.COMM_WORLD
+
+default_parameters=default_parameters.expectra_parameters
 
 def mpiexcepthook(type, value, traceback):
     sys.__excepthook__(type, value, traceback)
@@ -95,49 +102,15 @@ def match_x(x_std, y_src, x_src, xmin, xmax):
         i += 1
     return x_temp, y_temp
 
-'''
-Calculator is the superclass. Expectra is the subclass
-'''
-class Expectra(Calculator):
+class Expectra(object):
 
-    implemented_properties = ['chi_deviation', 'chi_area']
-
-    default_parameters = dict(
-        #Following parameters used for expectra to calculate exafs
-        trajectory = [],
-        ncore = 1,
-        multiple_scattering = ' ',
-        first_shell = False,
-        ignore_elements = None,
-        neighbor_cutoff = 6.0,
-        S02 = 0.89,
-        sig2 = 0.0, 
-        energy_shift = 3.4,
-        edge = 'L3',
-        absorber = 'Au',
-        specorder = "'Rh Au'",
-        skip = 0,
-        every = 1,
-        exp_file = 'chi_exp.dat',
-        #Following parameters used for xafsft to calculate g_r plot
-        real_space = False,
-        calc_type = 'area',
-        average = False, #if true, the curve difference will be averaged by the number of dots
-        kweight= 2,
-        dk = 1.0,
-        rmin = 2.0,
-        rmax = 6.0,
-        ft_part = 'mag',
-        debug = False)
     """
     set multiple_scattering = '--multiple-scattering' to enalbe multiple
     scattering calculation. Otherwise first-shell calculation will be
     conducted.
-    ncore is number of cores used for calcualtion.
     """
-
-    def __int__(self, label='EXAFS',
-                atoms = None, 
+    
+    def __init__(self, label='EXAFS',
                 kmin = 2.50, 
                 kmax = 10.00, 
                 chi_deviation = 100, 
@@ -151,100 +124,126 @@ class Expectra(Calculator):
             experimental and calculated EXAFS spectra
         """
         self.lable = label
-        self.real_space = real_space
-        self.atoms = atoms
         self.kmin = kmin
         self.kmax = kmax
         self.chi_deviation = chi_deviation
         self.area_diff = area_diff
-        self.parameters = None
         self.results = None
         self.x = None
         self.y = None
         self.traj_filename = None
+
+        for parameter in kwargs:
+            if parameter not in default_parameters:
+               print parameter, 'is not in the keywords included'
+               break
+        for (parameter, default) in default_parameters.iteritems():
+            setattr(self, parameter, kwargs.get(parameter, default))
       
-        Calculator.__init__(self, restart, ignore_bad_restart_file,
-                            label, atoms,
-                            **kwargs)
-      
+    def get_kmin(self):
+        print 'getting'
+        return self.kmin
 
-    def set(self, **kwargs):
-        """Set parameters like set(key1=value1, key2=value2,
-        ...)."""
-        changed_parameters = Calculator.set(self, **kwargs)
-        if changed_parameters:
-           self.reset()
+    def get_chi_differ(self, k=None, chi=None):
+        #self.traj_filename = filename
+        x_thy, y_thy = k, chi
 
-    def get_chi_differ(self, atoms=None, properties=None, filename=None):
-        self.traj_filename = filename
-        if properties is None:
-            self.calculate(atoms, 'chi_area')
-            return self.area_diff, numpy.array(self.x), numpy.array(self.y)
-        else:
-            self.calculate(atoms, 'chi_deviation')
-            return self.chi_deviation, numpy.array(self.x), numpy.array(self.y)
+        #load experimental chi data
+        try:
+            x_exp, y_exp = read_chi(self.exp_file) 
+        except:
+            x_exp, y_exp = load_chi_dat(self.exp_file)
 
-    def get_absorber(self):
-        return self.parameters.absorber
+        xmin = self.kmin
+        xmax = self.kmax
+        #interpolate chi_exp values based on k values provided in calculated data
+        x_exp, y_exp = match_x(x_thy, y_exp, x_exp, xmin, xmax)
+        x_thy, y_thy = match_x(x_thy, y_thy, x_thy, xmin, xmax)
+
+        y_thy = numpy.multiply(y_thy, numpy.power(x_thy, self.kweight))
+
+        self.x = x_thy
+        self.y = y_thy
+
+        if self.debug:
+           filename2 = 'rescaled_theory_chi.dat'
+           save_result(x_thy, y_thy, filename2)
+           
+           filename2 = 'rescaled_exp_chi.dat'
+           save_result(x_exp, y_exp, filename2)
+
+        self.area_diff = calc_area(y_exp, y_thy)
+        print "area calculation is done"
+#        if properties is None:
+#            self.calculate(atoms, 'chi_area')
+#            return self.area_diff, numpy.array(self.x), numpy.array(self.y)
+#        else:
+#            self.calculate(atoms, 'chi_deviation')
+#            return self.chi_deviation, numpy.array(self.x), numpy.array(self.y)
+
+#    def get_absorber(self):
+#        return self.parameters.absorber
 
     def calculate(self, atoms=None, properties=None):
 
-        parameters = self.parameters
+        if self.multiple_scattering == True:
+            self.first_shell = False
 
-        if parameters.multiple_scattering == True:
-            parameters.first_shell = False
-      
         trajectory = []
-        trajectory = parameters.trajectory[parameters.skip::parameters.every]
-        print '%4i configurations are received' % (len(trajectory))
+        #print "atom", len(atoms), type(atoms), "rank",COMM_WORLD.rank
+        if COMM_WORLD.rank==0:
+           if isinstance(atoms, list):
+              trajectory= atoms[self.skip::self.every]
+           else:
+              trajectory.append(atoms)
+           print '%4i configurations are received' % (len(trajectory))
+           print type(trajectory)
         trajectory = COMM_WORLD.bcast(trajectory)
-        parameters.absorber = get_default_absorber(trajectory[0], parameters)
+        self.absorber = self.get_default_absorber(trajectory[0])
       
-        k, chi = exafs_trajectory(parameters, trajectory)
-        save_result(k, chi, 'chi.dat')
+        k, chi = self.exafs_trajectory(trajectory)
+        print k, chi
+        #Calculate EXAFS difference compared to the given experiment data or store data
+        if COMM_WORLD.rank == 0:
+           if properties == 'area':
+              self.get_chi_differ(k, chi)
+              return self.area_diff, k, chi
+           else:
+              save_result(k, chi, 'chi.dat')
+              print "EXAFS Calculation is done. Data is stored in 'Chi.dat'."
 
-def get_default_absorber(atoms, args):
-    symbols = set(atoms.get_chemical_symbols())
-    if args.absorber:
-        if args.absorber not in symbols:
-            print 'ERROR: --absorber %s is not in the system' % args.absorber
-            sys.exit(2)
+    def get_default_absorber(self, atoms):
+        symbols = set(atoms.get_chemical_symbols())
+        if self.absorber:
+            if self.absorber not in symbols:
+                print 'ERROR: --absorber %s is not in the system' % self.absorber
+                sys.exit(2)
+            else:
+                return self.absorber
+        if self.ignore_elements:
+            symbols -= set(self.ignore_elements)
+        if len(symbols) == 1:
+            return list(symbols)[0]
         else:
-            return args.absorber
-    if args.ignore_elements:
-        symbols -= set(args.ignore_elements)
-    if len(symbols) == 1:
-        return list(symbols)[0]
-    else:
-        print 'ERROR: must specify --absorber if more than one chemical specie'
-        sys.exit(2)
-
-def exafs_trajectory(args, trajectory):
-    if args.multiple_scattering:
-        k, chi = exafs_multiple_scattering(args.S02, args.energy_shift, 
-                args.absorber, args.ignore_elements, args.edge, args.rmax,
-                args.sig2,
-                trajectory)
-    elif args.first_shell:
-        k, chi = exafs_first_shell(args.S02, args.energy_shift, 
-                args.absorber, args.ignore_elements, args.edge, 
-                args.neighbor_cutoff, args.sig2, trajectory)
-
-    return k, chi
-
-if __name__ == '__main__':
-    main()
+            print 'ERROR: must specify --absorber if more than one chemical specie'
+            sys.exit(2)
+   
+    def exafs_trajectory(self, trajectory):
+        if self.multiple_scattering:
+            k, chi = exafs_multiple_scattering(self.S02, self.energy_shift, 
+                    self.absorber, self.ignore_elements, self.edge, self.rmax,
+                    self.sig2,
+                    trajectory)
+        elif self.first_shell:
+            k, chi = exafs_first_shell(self.S02, self.energy_shift, 
+                    self.absorber, self.ignore_elements, self.edge, 
+                    self.neighbor_cutoff, self.sig2, trajectory)
+   
+        return k, chi
 
 
-
-
-
-
-
-
-
-
-
+"""
+version call expectra with 'mpirun'
         #write geoemtry file 'con' if trajectory file doesn't exist
         if self.traj_filename is None:
            self.traj_filename = 'CONCAR'
@@ -335,3 +334,4 @@ if __name__ == '__main__':
             self.area_diff = calc_area(y_exp, y_thy, calc_type = parameters.calc_type, average = parameters.average)
         else:
             self.area_diff = calc_area(y_exp, y_thy)
+"""

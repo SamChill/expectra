@@ -59,3 +59,29 @@ default_parameters=dict(
              pot_dir = os.getcwd()+'/pot'
              )
 
+#dictionary to store parameters for expectra
+expectra_parameters = dict(
+        multiple_scattering = ' ',
+        first_shell = False,
+        ignore_elements = None,
+        neighbor_cutoff = 6.0,
+        S02 = 0.89,
+        sig2 = 0.0, 
+        energy_shift = 3.4,
+        edge = 'L3',
+        absorber = 'Au',
+        specorder = "'Rh Au'",
+        skip = 0,
+        every = 1,
+        exp_file = 'chi_exp.dat',
+        #Following parameters used for xafsft to calculate g_r plot
+        real_space = False,
+        calc_type = 'area',
+        average = False, #if true, the curve difference will be averaged by the number of dots
+        kweight= 2,
+        dk = 1.0,
+        rmin = 2.0,
+        rmax = 6.0,
+        ft_part = 'mag',
+        debug = False)
+             
