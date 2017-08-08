@@ -3,13 +3,17 @@ import numpy
 import argparse
 import sys
 import os
-
+import cPickle as pickle
+import subprocess
 from expectra.exafs import exafs_first_shell, exafs_multiple_scattering
 from expectra.io import read_xdatcar, read_con, read_chi
 from ase.calculators.calculator import Calculator, all_changes, Parameters
 from ase import Atoms
 from ase.io.vasp import write_vasp
 from expectra.feff import load_chi_dat
+from expectra import default_parameters
+
+default_parameters=default_parameters.expectra_parameters
 
 def save_result(k, chi, filename):
     print 'saving rescaled experimental chi data'
@@ -79,38 +83,9 @@ def match_x(x_std, y_src, x_src, xmin, xmax):
         i += 1
     return x_temp, y_temp
 
-'''
-Calculator is the superclass. Expectra is the subclass
-'''
-class Expectra(Calculator):
+class Expectra(object):
 
-    implemented_properties = ['chi_deviation', 'chi_area']
 
-    default_parameters = dict(
-        #Following parameters used for expectra to calculate exafs
-        ncore = 1,
-        multiple_scattering = ' ',
-        ignore_elements = None,
-        neighbor_cutoff = 6.0,
-        S02 = 0.89,
-        sig2 = 0.0, 
-        energy_shift = 3.4,
-        edge = 'L3',
-        absorber = 'Au',
-        specorder = "'Rh Au'",
-        skip = 0,
-        every = 1,
-        exp_file = 'chi_exp.dat',
-        #Following parameters used for xafsft to calculate g_r plot
-        real_space = False,
-        calc_type = 'area',
-        average = False, #if true, the curve difference will be averaged by the number of dots
-        kweight= 2,
-        dk = 1.0,
-        rmin = 2.0,
-        rmax = 6.0,
-        ft_part = 'mag',
-        debug = False)
     """
     set multiple_scattering = '--multiple-scattering' to enalbe multiple
     scattering calculation. Otherwise first-shell calculation will be
@@ -118,12 +93,13 @@ class Expectra(Calculator):
     ncore is number of cores used for calcualtion.
     """
 
-    def __int__(self, label='EXAFS',
+    def __init__(self, label='EXAFS',
                 atoms = None, 
                 kmin = 2.50, 
                 kmax = 10.00, 
                 chi_deviation = 100, 
-                area_diff = 100, **kwargs):
+                area_diff = 100, 
+                **kwargs):
         """
         The expectra constructor:
             kmin, kmax ...........define the k window you are interested on. It is
@@ -133,31 +109,24 @@ class Expectra(Calculator):
             experimental and calculated EXAFS spectra
         """
         self.lable = label
-        self.real_space = real_space
         self.atoms = atoms
         self.kmin = kmin
         self.kmax = kmax
         self.chi_deviation = chi_deviation
         self.area_diff = area_diff
-        self.parameters = None
         self.results = None
         self.x = None
         self.y = None
-        self.traj_filename = None
-      
-        Calculator.__init__(self, restart, ignore_bad_restart_file,
-                            label, atoms,
-                            **kwargs)
-      
 
-    def set(self, **kwargs):
-        """Set parameters like set(key1=value1, key2=value2,
-        ...)."""
-        changed_parameters = Calculator.set(self, **kwargs)
-        if changed_parameters:
-           self.reset()
+        for parameter in kwargs:
+            if parameter not in default_parameters:
+               print parameter, 'is not in the keywords included'
+               break
+        for (parameter, default) in default_parameters.iteritems():
+            setattr(self, parameter, kwargs.get(parameter, default))
 
-    def get_chi_differ(self, atoms=None, properties=None, filename=None):
+
+    def get_chi_differ(self, atoms=None, properties=None, filename=''):
         self.traj_filename = filename
         if properties is None:
             self.calculate(atoms, 'chi_area')
@@ -167,54 +136,62 @@ class Expectra(Calculator):
             return self.chi_deviation, self.x, self.y
 
     def get_absorber(self):
-        return self.parameters.absorber
+        return self.absorber
 
-    def calculate(self, atoms=None, properties=None):
+    def calculate(self, atoms=None, properties=None,k_exp = None,chi_exp = None):
 
-        parameters = self.parameters
-        
-        #write geoemtry file 'con' if trajectory file doesn't exist
-        if self.traj_filename is None:
-           self.traj_filename = 'CONCAR'
-           write_vasp(filename = self.traj_filename, atoms = atoms, direct=True, vasp5=True)
 
         #prepare the command to run 'expectra'
-        if parameters.ignore_elements is not None:
-            ignore = '--ignore-elements ' + parameters.ignore_elements
+        if self.ignore_elements is not None:
+            ignore = '--ignore-elements ' + self.ignore_elements
         else:
             ignore = ''
-        
-        expectra_para = ['mpirun -n', str(parameters.ncore),
-                         'expectra', parameters.multiple_scattering,
-                         '--neighbor-cutoff', str(parameters.neighbor_cutoff),
-                         '--S02', str(parameters.S02),
-                         '--sig2',str(parameters.sig2),
-                         '--energy-shift', str(parameters.energy_shift),
-                         '--edge', parameters.edge,
-                         '--absorber', parameters.absorber,
+        expectra_para = ['mpirun -n', str(self.ncore),
+                         'expectra', self.multiple_scattering,
+                         '--neighbor-cutoff', str(self.neighbor_cutoff),
+                         '--S02', str(self.S02),
+                         '--sig2',str(self.sig2),
+                         '--energy-shift', str(self.energy_shift),
+                         '--edge', self.edge,
+                         '--absorber', self.absorber,
                          ignore,
-                         '--specorder', parameters.specorder,
-                         '--skip', str(parameters.skip),
-                         '--every', str(parameters.every),
+                         '--specorder', self.specorder,
+                         '--skip', str(self.skip),
+                         '--every', str(self.every),
                          self.traj_filename]
         join_symbol = ' '
         expectra_cmd = join_symbol.join(expectra_para)
-        print 'Expectra parameters:'
-        print '   ', expectra_cmd
-
+        print expectra_cmd
         #run 'expectra'
-        os.system(expectra_cmd)
+        proc = subprocess.Popen(expectra_cmd, shell=True, stdin=subprocess.PIPE,stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
+        proc.stdin.write(pickle.dumps(atoms))
+        proc.stdin.flush()
+        output,return_value = proc.communicate(), proc.returncode
 
-        if parameters.real_space:
+        if output[1] is not None:
+           print ("Error {} raised for expectra: {}".format(return_value,output[1]))
+           sys.exit()
+
+        lines = output[0].split('\n')
+        for line in lines:
+            if "k is" in line:
+               k = numpy.array([float(element) for element in line.split('is')[1].strip().strip('[').strip(']').split(',')])
+               continue
+            if "chi is" in line:
+               chi = numpy.array([float(element) for element in line.split('is')[1].strip().strip('[').strip(']').split(',')])
+               continue
+            print line
+
+        if self.real_space:
            print "Compare exafs in real space"
            xafsft_para = ['xafsft',
-                          '--kmin', str(parameters.kmin),
-                          '--kmax', str(parameters.kmax),
-                          '--kweight', str(parameters.kweight),
-                          '--dk', str(parameters.dk),
-                          '--rmin', str(parameters.rmin),
-                          '--rmax', str(parameters.rmax),
-                          '--ft-part', parameters.ft_part,
+                          '--kmin', str(self.kmin),
+                          '--kmax', str(self.kmax),
+                          '--kweight', str(self.kweight),
+                          '--dk', str(self.dk),
+                          '--rmin', str(self.rmin),
+                          '--rmax', str(self.rmax),
+                          '--ft-part', self.ft_part,
                           'chi.dat']
            join_symbol = ' '
            xafsft_cmd = join_symbol.join(xafsft_para)
@@ -222,25 +199,28 @@ class Expectra(Calculator):
            print '   ', xafsft_cmd
            os.system(xafsft_cmd)
            inputfile = 'exafs.chir'
-           xmin = parameters.rmin
-           xmax = parameters.rmax
+           xmin = self.rmin
+           xmax = self.rmax
         else:
            print "Compare exafs in k-space"
-           inputfile = 'chi.dat'
-           xmin = parameters.kmin
-           xmax = parameters.kmax
-        #load calculated chi data
-        try:
-            x_thy, y_thy = read_chi(inputfile) 
-        except:
-            x_thy, y_thy = load_chi_dat(inputfile)
+           xmin = self.kmin
+           xmax = self.kmax
 
-        #load experimental chi data
-        try:
-            x_exp, y_exp = read_chi(parameters.exp_file) 
-        except:
-            x_exp, y_exp = load_chi_dat(parameters.exp_file)
+        if properties == 'area':
+           self.get_difference(k, chi, k_exp, chi_exp)
+           return self.area_diff, k, chi
+        else:
+           save_result(k, chi, 'chi.dat')
+           print "EXAFS Calculation is done. Data is stored in 'Chi.dat'."
 
+    def get_difference(self, k=None, chi=None, k_exp=None, chi_exp=None):
+        #self.traj_filename = filename
+        x_thy, y_thy = k, chi
+        x_exp, y_exp = k_exp, chi_exp
+
+        xmin = self.kmin
+        xmax = self.kmax
+        y_thy = numpy.multiply(y_thy, numpy.power(x_thy, self.kweight))
         #interpolate chi_exp values based on k values provided in calculated data
         x_exp, y_exp = match_x(x_thy, y_exp, x_exp, xmin, xmax)
         x_thy, y_thy = match_x(x_thy, y_thy, x_thy, xmin, xmax)
@@ -248,17 +228,18 @@ class Expectra(Calculator):
         self.x = x_thy
         self.y = y_thy
 
-        if not parameters.real_space:
-           y_thy = numpy.multiply(y_thy, numpy.power(x_thy, parameters.kweight))
-
-        if parameters.debug:
+        if self.debug:
            filename2 = 'rescaled_theory_chi.dat'
            save_result(x_thy, y_thy, filename2)
            
            filename2 = 'rescaled_exp_chi.dat'
            save_result(x_exp, y_exp, filename2)
 
-        if parameters.real_space:
-            self.area_diff = calc_area(y_exp, y_thy, calc_type = parameters.calc_type, average = parameters.average)
-        else:
-            self.area_diff = calc_area(y_exp, y_thy)
+        self.area_diff = calc_area(y_exp, y_thy)
+        print "area calculation is done"
+#        if properties is None:
+#            self.calculate(atoms, 'chi_area')
+#            return self.area_diff, numpy.array(self.x), numpy.array(self.y)
+#        else:
+#            self.calculate(atoms, 'chi_deviation')
+#            return self.chi_deviation, numpy.array(self.x), numpy.array(self.y)

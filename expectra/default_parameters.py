@@ -61,6 +61,7 @@ default_parameters=dict(
 
 #dictionary to store parameters for expectra
 expectra_parameters = dict(
+        ncore = 2,
         multiple_scattering = ' ',
         first_shell = False,
         ignore_elements = None,
@@ -73,7 +74,7 @@ expectra_parameters = dict(
         specorder = "'Rh Au'",
         skip = 0,
         every = 1,
-        exp_file = 'chi_exp.dat',
+        traj_filename ='',
         #Following parameters used for xafsft to calculate g_r plot
         real_space = False,
         calc_type = 'area',

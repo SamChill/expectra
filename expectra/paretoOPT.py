@@ -7,7 +7,7 @@ from ase.units import kB, fs
 from ase.parallel import world
 from ase.io import write
 from ase.io.trajectory import Trajectory
-from expectra.basin_surface import BasinHopping
+from expectra.basin import BasinHopping
 from expectra import default_parameters as dp
 from expectra.io import read_dots, read_atoms, write_atoms
 
