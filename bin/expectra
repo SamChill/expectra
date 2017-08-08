@@ -75,7 +75,7 @@ def main():
     trajectory = []
     if COMM_WORLD.rank == 0:
         if len(args.trajectories)==0:
-           print 'atom reading in memory model'
+           #print 'atom reading in memory model'
            #take inputs of atoms from parent process (cal_exafs.py here)
            atoms=pickle.Unpickler(sys.stdin).load()
            if isinstance(atoms, list):

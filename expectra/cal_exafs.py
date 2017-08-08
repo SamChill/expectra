@@ -161,7 +161,7 @@ class Expectra(object):
                          self.traj_filename]
         join_symbol = ' '
         expectra_cmd = join_symbol.join(expectra_para)
-        print expectra_cmd
+        #print expectra_cmd
         #run 'expectra'
         proc = subprocess.Popen(expectra_cmd, shell=True, stdin=subprocess.PIPE,stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
         proc.stdin.write(pickle.dumps(atoms))
@@ -202,7 +202,7 @@ class Expectra(object):
            xmin = self.rmin
            xmax = self.rmax
         else:
-           print "Compare exafs in k-space"
+           #print "Compare exafs in k-space"
            xmin = self.kmin
            xmax = self.kmax
 
@@ -236,7 +236,7 @@ class Expectra(object):
            save_result(x_exp, y_exp, filename2)
 
         self.area_diff = calc_area(y_exp, y_thy)
-        print "area calculation is done"
+        #print "area calculation is done"
 #        if properties is None:
 #            self.calculate(atoms, 'chi_area')
 #            return self.area_diff, numpy.array(self.x), numpy.array(self.y)
