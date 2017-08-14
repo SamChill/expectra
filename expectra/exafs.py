@@ -62,18 +62,18 @@ def chi_path(path, r, sig2, energy_shift, s02, N):
 
     return xkout, numpy.imag(chi)
 
-def exafs_reference_path(z, feff_options):
+def exafs_reference_path(z, feff_options, tmp_dir=None):
     atoms = bulk(z, orthorhombic=True, cubic=True)
     atoms = atoms.repeat((4,4,4))
     center = numpy.argmin(numpy.sum((atoms.get_scaled_positions() -
         numpy.array( (.5,.5,.5) ))**2.0, axis=1))
     #do the bulk reference scattering calculation and get the path
     #data from feff
-    path = run_feff(atoms, center, feff_options, get_path=True)[2]
+    path = run_feff(atoms, center, feff_options, tmp_dir=tmp_dir, get_path=True)[2]
     return path
 
 def exafs_first_shell(S02, energy_shift, absorber,
-    ignore_elements, edge, neighbor_cutoff, sig2, trajectory):
+    ignore_elements, edge, neighbor_cutoff, sig2, trajectory, tmp_dir=None):
     feff_options = {
             'RMAX':str(neighbor_cutoff),
             'HOLE':'%i %.4f' % (feff_edge_number(edge), S02),
@@ -81,7 +81,7 @@ def exafs_first_shell(S02, energy_shift, absorber,
     }
 
     #get the bulk reference state
-    path = exafs_reference_path(absorber, feff_options)
+    path = exafs_reference_path(absorber, feff_options, tmp_dir=tmp_dir)
 
     k = None
     chi_total = None
@@ -129,7 +129,7 @@ def exafs_first_shell(S02, energy_shift, absorber,
     return k, chi_total
 
 def exafs_multiple_scattering(S02, energy_shift, absorber,
-    ignore_elements, edge, rmax, sig2, trajectory):
+    ignore_elements, edge, rmax, sig2, trajectory, tmp_dir=None):
     feff_options = {
             'RMAX':str(rmax),
             'HOLE':'%i %.4f' % (feff_edge_number(edge), S02),
@@ -159,7 +159,7 @@ def exafs_multiple_scattering(S02, energy_shift, absorber,
             if atoms[i].symbol != absorber:
                 continue
 #            print "feff run for ", counter
-            k, chi = run_feff(atoms, i, feff_options)
+            k, chi = run_feff(atoms, i, feff_options, tmp_dir=tmp_dir)
             if k is None and chi is None:
                 continue
 

@@ -52,7 +52,7 @@ default_parameters=dict(
              #files to log data
              logfile='basin_log', 
              trajectory='lowest.traj',
-             optimizer_logfile='geo_opt.log',
+             optimizer_logfile=None,
              #directories to create for data logging
              configs_dir = os.getcwd()+'/configs',
              exafs_dir = os.getcwd()+'/exafs',
@@ -84,5 +84,6 @@ expectra_parameters = dict(
         rmin = 2.0,
         rmax = 6.0,
         ft_part = 'mag',
+        tmpdir = None,
         debug = False)
              

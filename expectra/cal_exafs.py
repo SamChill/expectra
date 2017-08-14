@@ -147,6 +147,7 @@ class Expectra(object):
         else:
             ignore = ''
         expectra_para = ['mpirun -n', str(self.ncore),
+                         #'-bind-to-socket',
                          'expectra', self.multiple_scattering,
                          '--neighbor-cutoff', str(self.neighbor_cutoff),
                          '--S02', str(self.S02),
@@ -158,6 +159,7 @@ class Expectra(object):
                          '--specorder', self.specorder,
                          '--skip', str(self.skip),
                          '--every', str(self.every),
+                         '--tmpdir', self.tmpdir,
                          self.traj_filename]
         join_symbol = ' '
         expectra_cmd = join_symbol.join(expectra_para)

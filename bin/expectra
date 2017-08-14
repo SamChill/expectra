@@ -60,12 +60,14 @@ def main():
             help='number of frames to skip at the beginning')
     parser.add_argument('--every', type=int, default=1,
             help='number of frames to between each step')
+    parser.add_argument('--tmpdir', type=str, default=None,
+            help='path used to store temp files')
     parser.add_argument('trajectories', metavar='TRAJ', nargs='*',
             default=None,
             help='trajectory file (POSCAR, con, xyz)')
 
     args = parser.parse_args()
-
+    print 'tmpdir:', args.tmpdir
     if args.ignore_elements:
         args.ignore_elements = args.ignore_elements.split(',')
 
@@ -150,12 +152,11 @@ def exafs_trajectory(args, trajectory):
     if args.multiple_scattering:
         k, chi = exafs_multiple_scattering(args.S02, args.energy_shift, 
                 args.absorber, args.ignore_elements, args.edge, args.rmax,
-                args.sig2,
-                trajectory)
+                args.sig2,trajectory, args.tmpdir)
     elif args.first_shell:
         k, chi = exafs_first_shell(args.S02, args.energy_shift, 
                 args.absorber, args.ignore_elements, args.edge, 
-                args.neighbor_cutoff, args.sig2, trajectory)
+                args.neighbor_cutoff, args.sig2, trajectory, args.tmpdir)
 
     return k, chi
 
