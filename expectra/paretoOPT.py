@@ -269,45 +269,6 @@ class ParetoLineOptimize(Dynamics):
            self.log_visited_configs()
 #        for atoms in pareto_atoms:
 #            self.log_paretoAtoms.write(atoms)
-     
-    """
-        for step in range(steps):
-
-            #run BasinHopping
-            opt = BasinHopping(nsteps)
-            opt.run(fmax)
-            
-            #determine pareto line
-            old_pareto = copy.deepcopy(pareto_line)
-            for dot in dots:
-                pareto_line = self.pareto_push(step, parabola, dot)
-            
-            alpha_dots, mid_alpha = self.sort_dots(pareto_line, dots)
-
-
-         if alteration = "even_distribution":
-            for i in range(ncore):
-                weight_sum = 0
-                numb_dots  = 0
-                for alpha_dot in alpha_dots:
-                    if alpha_dot[0] > alpha_list[i] and alpha_dot[0] < alpha_list[i+1]:
-                       numb_dots = alpha_dot[1] + numb_dots
-                       weight_sum = alpha_dot[1] * alpha_dot[0] + weight_sum
-
-                #alter alpha and try to get an even distribution of dots in the effective area
-                avg_alpha = weight_sum / numb_dots
-                curr_ratio = numb_dots / float(len(dots))
-                if avg_alpha < mid_alpha:
-                   if curr_ratio < target_ratio:
-                      alpha[i] = np.random(alpha_list[i], avg_alpha)
-                   else:
-                      alpha[i] = np.random(avg_alpha, alpha_list[i+1])
-                else:
-                   if curr_ratio < target_ratio:
-                      alpha[i] = np.random(avg_alpha, alpha_list[i+1])
-                   else:
-                      alpha[i] = np.random(alpha_list[i], avg_alpha)
-    """
 
     #Find the new structures located
     def differ_configs(self, configs_o):
