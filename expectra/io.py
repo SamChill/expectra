@@ -297,4 +297,26 @@ def read_traj(filename, skip = 0, every = 1):
         else:
            continue
     return atoms
-
+"""
+def read_exafs(filename):
+    exafs = {}
+    f = open(filename, 'r')
+    new_exafs = False
+    while True:
+      line = f.readline()
+      if 'images' in line:
+         fields = line.split()
+         state = fields[1]
+         exafs[fields[1]]=[]
+         k=[]
+         chi=[]
+         new_exafs = True
+      else:
+         fields = line.split()
+         k.append(float(fields[0]))
+         chi.append(float(fields[1]))
+      if float(fields[0]) == 20.:
+         exafs[state].append(k)
+         exafs[state].append(chi)
+    return exafs
+"""

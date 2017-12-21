@@ -47,11 +47,13 @@ default_parameters=dict(
              #Structure Comparison
              indistinguishable = True,
              match_structure = False,
+             symbol_only = False,
              comp_eps_e = 2.e-3, #criterion to determine if two configurations are identtical in energy 
              comp_eps_r = 0.2, #criterion to determine if two configurations are identical in geometry
              #files to log data
              logfile='basin_log', 
              trajectory='lowest.traj',
+             lowest_structure = 'lowest.traj',
              optimizer_logfile=None,
              #directories to create for data logging
              configs_dir = os.getcwd()+'/configs',
@@ -63,6 +65,7 @@ default_parameters=dict(
 expectra_parameters = dict(
         ncore = 2,
         multiple_scattering = ' ',
+        rmax_path = 6.0,
         first_shell = False,
         ignore_elements = None,
         neighbor_cutoff = 6.0,

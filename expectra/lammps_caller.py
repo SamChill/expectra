@@ -45,15 +45,14 @@ class lammps_caller:
                if 'Energy initial, next-to-last, final' in line:
                    line = f.readline()
                    energy = float(line.split()[2])
-                   print "energy:", energy
+                   #print "energy:", energy
                if 'Iterations, force evaluations' in line:
                    iteration = int(line.split()[4])
-                   print "iteration:", iteration
+                   #print "iteration:", iteration
           f.close()
-          print energy
           atoms = read_lammps_trj(filename=self.trajfile, skip=iteration, specorder=self.specorder)
           #write('lammps_opted.traj',images=atoms[0],format='traj')
-          return energy, atoms[0]
+          return energy, atoms[0], iteration
 
       def run(self, run_type='geo_opt'):
           #prepare structure file 'data_lammps' for lammps
@@ -63,21 +62,19 @@ class lammps_caller:
              lammps_script = 'lp_opt.py'
              output = 'opt_lammps.out'
           elif run_type == 'md':
-             print "MD with lammps is running"
+             #print "MD with lammps is running"
              lammps_script = 'lp_md.py'
              output = 'md_lammps.out'
 
           self.rm_file(self.logfile)
           self.rm_file(self.trajfile)
           self.rm_file(output)
-          print output
           run_para = ['mpirun -n', str(self.ncore),
                       'python', lammps_script,
                       '>', output]
           join_symbol = ' '
           run_lammps = join_symbol.join(run_para)
           os.system(run_lammps)
-          print run_lammps
 
       def rm_file(self, filename):
           filename = os.getcwd()+'/'+filename

@@ -158,7 +158,6 @@ def exafs_multiple_scattering(S02, energy_shift, absorber,
 
             if atoms[i].symbol != absorber:
                 continue
-#            print "feff run for ", counter
             k, chi = run_feff(atoms, i, feff_options, tmp_dir=tmp_dir)
             if k is None and chi is None:
                 continue
@@ -170,11 +169,7 @@ def exafs_multiple_scattering(S02, energy_shift, absorber,
 
     #in case too many ranks
     k = COMM_WORLD.bcast(k)
-    #print "k values:", k
     if chi_total is None:
-        #if k is None:
-        #   chi_total = numpy.zeros(429)
-        #else:
         chi_total = numpy.zeros(len(k))
 
     chi_total = COMM_WORLD.allreduce(chi_total)

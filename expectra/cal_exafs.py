@@ -39,15 +39,13 @@ def calc_area(y_exp, y_theory, calc_type='area', average = False):
     area_diff = 0.00
     for i in range(0, numb):
       diff = numpy.absolute(y_exp[i] - y_theory[i])
-      #if x is not None:
-      #  area_diff = area_diff + diff * x[i] ** 2
       if calc_type == 'least_square':
         area_diff = area_diff + (diff/y_exp[i])**2
       elif calc_type == 'area':
         area_diff = area_diff + diff
     if average:
        area_diff = area_diff / numb
-    print ('%s: %15.6f' % ("area_diff", area_diff))
+    #print ('%s: %15.6f' % ("area_diff", area_diff))
     return area_diff
 
 #linearly interpolate y values based on y_std value
@@ -59,12 +57,6 @@ def match_x(x_std, y_src, x_src, xmin, xmax):
     """
     x_temp = []
     y_temp = []
-    #reset chi_calc based on k_exp
-    #tell if k_exp starts from a smaller value
-#          try:
-#          result = compareValue(k_exp[0],k_cacl[0])
-#      except MyValidationError as exception:
-#          print exception.message
     i = 0   
     while ( 0 <= i < len(x_std) and x_std[i] < xmax):
         if x_std[i] < xmin:
@@ -125,7 +117,7 @@ class Expectra(object):
         for (parameter, default) in default_parameters.iteritems():
             setattr(self, parameter, kwargs.get(parameter, default))
 
-
+    #TODO: remove get_chi_differ
     def get_chi_differ(self, atoms=None, properties=None, filename=''):
         self.traj_filename = filename
         if properties is None:
@@ -138,20 +130,19 @@ class Expectra(object):
     def get_absorber(self):
         return self.absorber
 
-    def calculate(self, atoms=None, properties=None,k_exp = None,chi_exp = None):
+    def calculate(self, atoms=None, properties=None,k_exp = None,chi_exp = None, filename=''):
 
 
+        self.traj_filename = filename
         #prepare the command to run 'expectra'
         if self.ignore_elements is not None:
             ignore = '--ignore-elements ' + self.ignore_elements
         else:
             ignore = ''
-
-        if self.tmpdir is None:
-           self.tmpdir = os.getcwd()
         expectra_para = ['mpirun -n', str(self.ncore),
                          #'-bind-to-socket',
                          'expectra', self.multiple_scattering,
+                         '--rmax', self.rmax_path,
                          '--neighbor-cutoff', str(self.neighbor_cutoff),
                          '--S02', str(self.S02),
                          '--sig2',str(self.sig2),
@@ -166,8 +157,6 @@ class Expectra(object):
                          self.traj_filename]
         join_symbol = ' '
         expectra_cmd = join_symbol.join(expectra_para)
-        #print expectra_cmd
-        #run 'expectra'
         proc = subprocess.Popen(expectra_cmd, shell=True, stdin=subprocess.PIPE,stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
         proc.stdin.write(pickle.dumps(atoms))
         proc.stdin.flush()
@@ -185,7 +174,6 @@ class Expectra(object):
             if "chi is" in line:
                chi = numpy.array([float(element) for element in line.split('is')[1].strip().strip('[').strip(']').split(',')])
                continue
-            print line
 
         if self.real_space:
            print "Compare exafs in real space"
@@ -223,8 +211,6 @@ class Expectra(object):
         x_thy, y_thy = k, chi
         x_exp, y_exp = k_exp, chi_exp
 
-        save_result(x_thy, y_thy, 'not_scaled.dat')
-
         xmin = self.kmin
         xmax = self.kmax
         y_thy = numpy.multiply(y_thy, numpy.power(x_thy, self.kweight))
@@ -243,10 +229,3 @@ class Expectra(object):
            save_result(x_exp, y_exp, filename2)
 
         self.area_diff = calc_area(y_exp, y_thy)
-        #print "area calculation is done"
-#        if properties is None:
-#            self.calculate(atoms, 'chi_area')
-#            return self.area_diff, numpy.array(self.x), numpy.array(self.y)
-#        else:
-#            self.calculate(atoms, 'chi_deviation')
-#            return self.chi_deviation, numpy.array(self.x), numpy.array(self.y)

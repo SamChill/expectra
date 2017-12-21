@@ -204,8 +204,6 @@ def run_feff(atoms, absorber, feff_options={}, tmp_dir=None, get_path=False):
 
     stdout, stderr = p.communicate()
     stderr = stderr.strip()
-#    print 'stdout:', stdout
-#    print 'Stderr:', stderr
     if "hash error" in stderr:
         atoms[absorber].position = atoms[absorber].position+0.001
 #        atoms[absorber].set_position(atoms[absorber].get_position()+0.001)
