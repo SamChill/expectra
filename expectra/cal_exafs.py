@@ -146,6 +146,9 @@ class Expectra(object):
             ignore = '--ignore-elements ' + self.ignore_elements
         else:
             ignore = ''
+
+        if self.tmpdir is None:
+           self.tmpdir = os.getcwd()
         expectra_para = ['mpirun -n', str(self.ncore),
                          #'-bind-to-socket',
                          'expectra', self.multiple_scattering,
@@ -219,6 +222,8 @@ class Expectra(object):
         #self.traj_filename = filename
         x_thy, y_thy = k, chi
         x_exp, y_exp = k_exp, chi_exp
+
+        save_result(x_thy, y_thy, 'not_scaled.dat')
 
         xmin = self.kmin
         xmax = self.kmax

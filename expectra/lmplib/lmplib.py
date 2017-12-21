@@ -463,7 +463,7 @@ End LAMMPSlib Interface Documentation
         
         # xph: the following part is from lammpsrun.py in ASE
         f.write(fname + ' (written by ASE) \n\n')
-
+        print 'writing lammps'
         symbols = atoms.get_chemical_symbols()
         n_atoms = len(symbols)
         f.write('%d \t atoms \n' % n_atoms)

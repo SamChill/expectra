@@ -43,9 +43,14 @@ def per_atom_norm(v, box, ibox = None):
     diff = pbc(v, box, ibox)
     return numpy.sqrt(numpy.sum(diff**2.0, axis=1)) 
 
-def match(a,b,eps_r,neighbor_cutoff,indistinguishable):
+def match(a,b,eps_r,neighbor_cutoff,indistinguishable, symbol_only=False):
     if len(a)!=len(b):
         return False
+    if symbol_only:
+       if a.get_chemical_symbols()==b.get_chemical_symbols():
+          return True
+       else:
+          return False
 
     if indistinguishable:
         return get_mappings(a,b,eps_r,neighbor_cutoff)
