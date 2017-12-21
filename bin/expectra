@@ -67,7 +67,6 @@ def main():
             help='trajectory file (POSCAR, con, xyz)')
 
     args = parser.parse_args()
-    print 'tmpdir:', args.tmpdir
     if args.ignore_elements:
         args.ignore_elements = args.ignore_elements.split(',')
 
@@ -115,12 +114,8 @@ def main():
        save_result(k, chi)
     else:
        if COMM_WORLD.rank == 0:
-          #pickle.dump(k,sys.stdout)
-          #pickle.dump(chi,sys.stdout)
           print(('k is {}').format(k.tolist()))
           print(('chi is {}').format(chi.tolist()))
-          #print 'k is', pickle.dump(k,sys.stdout)
-          #print 'chi is',pickle.dump(chi,sys.stdout)
        else:
           sys.exit()
 

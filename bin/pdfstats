@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 import numpy
-
-from expectra.io import read_xdatcar, read_con, read_atoms
-from ase.neighborlist import NeighborList
-import ase.io
+import ase
 from ase.io import read
+from expectra.io import read_xdatcar, read_con, read_atoms
+#from expectra.aselite import NeighborList, read_vasp
+from ase.neighborlist import NeighborList
 
 def main():
     import argparse
@@ -139,47 +139,68 @@ def snapshots_command(args):
         print 'reading', filename
         if filename[-3:] == 'con':
             trajectory += read_con(filename)[args.skip::args.every]
-        elif filename.startswith('POSCAR') or filename.startswith('CONTCAR'):
+        elif 'POSCAR' in filename or 'CONTCAR' in filename:
+            #trajectory = [read_vasp(filename)]
             trajectory = [ase.io.read(filename, format='vasp')]
         elif filename[-3:] == 'xyz':
             trajectory = read_atoms(filename)
         else:
-            trajectory += read_xdatcar(filename, args.skip, args.every)
+            #try:
+                #trajectory += read(filename, format="vasp-xdatcar",index=slice(args.skip,None,args.every))
+            #except:
+            #    pass 
+            try:
+                trajectory += read_xdatcar(filename, args.skip, args.every)
+            except:
+                pass
+            #from tsase.io import read_vasp_multiframe
+            #trajectory += read_vasp_multiframe(filename, args.skip, args.every)
 
     nl = None
     acc = Accumulator()
+    #cns = numpy.zeros(len(trajectory[0]), int)
+    f = open('bonds.dat', 'w')
     for i, atoms in enumerate(trajectory):
+        #if i == 0:
+        #    for a in xrange(len(atoms)):
+        #        for b in xrange(a+1,len(atoms)):
+        #            if atoms.get_distance(a,b) < 3.3:
+        #                cns[a] += 1
+        #                cns[b] += 1
+
         atoms = atoms.copy()
+        atoms.set_pbc(False)
         if args.ignore_elements:
             ignore_indicies = [atom.index for atom in atoms 
                                if atom.symbol in args.ignore_elements]
-            del atoms[ignore_indicies]
+        #    del atoms[ignore_indicies]
         if nl == None:
             nl = NeighborList(len(atoms)*[args.neighbor_cutoff/2.0], skin=0.3, 
-                    self_interaction=False, bothways=False)
+                    self_interaction=False, bothways=True)
         nl.update(atoms)
 
         for j in xrange(len(atoms)):
+            if args.ignore_elements and (atoms[j].symbol in args.ignore_elements): continue
             indicies, offsets = nl.get_neighbors(j)
             for k, offset in zip(indicies, offsets):
-                r = numpy.linalg.norm(atoms.positions[j] - (atoms.positions[k] + numpy.dot(offset, atoms.get_cell())))
+                r = numpy.linalg.norm(atoms.positions[int(j)] - (atoms.positions[int(k)] + numpy.dot(offset, atoms.get_cell())))
 
                 #r = atoms.get_distance(j,k,True)
                 if r >= args.neighbor_cutoff: continue
                 if r <= args.neighbor_cutoff_min: continue
                 acc.push(r)
+                f.write('%.8e %d %d\n' % (r, j, k))
+        
+        if args.ignore_elements: print '%4i/%i: N: %.2f' % (i+1,len(trajectory),acc.N/(float(i+1) * (len(atoms)-len(ignore_indicies)) )),
+        else: print '%4i/%i: N: %.2f' % (i+1,len(trajectory),acc.N/(float(i+1) * len(atoms) )),
 
-        print '%4i/%i: N: %.2f' % (i+1,len(trajectory),2*acc.N/(float(i+1)*len(atoms))),
         try:
             acc.describe_short()
         except:
             pass
 
-
-    f = open('bonds.dat', 'w')
-    for x in acc.xs:
-        f.write('%.8e\n' % x)
     f.close()
+
 
 if __name__ == '__main__':
     main()
