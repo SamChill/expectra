@@ -101,7 +101,6 @@ def read_lammps_trj(filename=None, skip=0, every=1, specorder=None):
         if not line:
             break
 
-        #TODO: extend to proper dealing with multiple steps in one trajectory file
         if 'ITEM: TIMESTEP' in line:
             lo = [] ; hi = [] ; tilt = []
             id = [] ; type = []
@@ -109,6 +108,7 @@ def read_lammps_trj(filename=None, skip=0, every=1, specorder=None):
             # xph: add charges
             charges = []
             line = f.readline()
+            #lei: itrj used for skipping
             itrj = int(line.split()[0])
 
         line = f.readline()
@@ -116,10 +116,8 @@ def read_lammps_trj(filename=None, skip=0, every=1, specorder=None):
             line = f.readline()
             n_atoms = int(line.split()[0])
         
-        #skip geometries
+        #lei: skip geometries
         if itrj < skip:
-        #if count < skip:
-#           print '%4d is jumped' % itrj
            for i in range(n_atoms + 5):
                line = f.readline()
         else:

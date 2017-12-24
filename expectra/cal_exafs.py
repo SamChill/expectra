@@ -132,7 +132,6 @@ class Expectra(object):
 
     def calculate(self, atoms=None, properties=None,k_exp = None,chi_exp = None, filename=''):
 
-
         self.traj_filename = filename
         #prepare the command to run 'expectra'
         if self.ignore_elements is not None:
@@ -140,9 +139,9 @@ class Expectra(object):
         else:
             ignore = ''
         expectra_para = ['mpirun -n', str(self.ncore),
-                         #'-bind-to-socket',
+                         '--bind-to', str(self.bind_methods),
                          'expectra', self.multiple_scattering,
-                         '--rmax', self.rmax_path,
+                         '--rmax', str(self.rmax_path),
                          '--neighbor-cutoff', str(self.neighbor_cutoff),
                          '--S02', str(self.S02),
                          '--sig2',str(self.sig2),
@@ -174,6 +173,7 @@ class Expectra(object):
             if "chi is" in line:
                chi = numpy.array([float(element) for element in line.split('is')[1].strip().strip('[').strip(']').split(',')])
                continue
+            #print line
 
         if self.real_space:
            print "Compare exafs in real space"

@@ -429,12 +429,12 @@ class BasinHopping(Dynamics):
            self.logfile.write("{:12s}: {:4d} {:5d} {:12s} {:8.6f} {:5.4f} {:15.6f} {:15.6f} "
                               "{:15.6f} {:5.4f} {:8.4f} {}\n".format(
                               name, step, accept, state, self.ratio, alpha, 
-                              En, Un, Umin, self.dr, self.time_stamp, self.force_calls))
+                              En, Un, Umin/self.scale_ratio, self.dr, self.time_stamp, self.force_calls))
         else:
            self.logfile.write("{:12s}: {:4d} {:5d} {:12s} {:8.6f} {:5.4f} {:15.6f} {:15.6f} "
                               "{:15s} {:15.6f} {:15.6f} {:5.4f} {:2d} {:4d} {:8.4f} {:8.4f} {}\n".format(
                               name, step, accept, state, self.ratio, alpha, 
-                              En, self.chi_deviation, temp_chi, Un, Umin, 
+                              En, self.chi_deviation, temp_chi, Un, Umin/self.scale_ratio, 
                               self.dr, self.md_cycle, self.move_step, self.md_run_time, 
                               self.time_stamp, self.force_calls))
         self.logfile.flush()
@@ -726,24 +726,22 @@ class BasinHopping(Dynamics):
                                 specorder = self.specorder)
               lp.run('md')
               self.md_traj = read_lammps_trj(filename=md_trajectory, skip=0, specorder=self.specorder)
-              self.atoms=self.md_traj[-1]
               self.logger.log(self.level, "------------")
-              #self.get_energy()
-              #pot_energy=self.energy
               #self.logger.log(self.level, str(pot_energy))
            else:
               try:
                  self.md_traj, e_log = self.run_md(md_steps=self.md_steps)
-                # pot_energy=self.get_energy()
                 # self.logger.log(self.level, str(pot_energy))
               except:
                  self.logger.log(self.level, "MD Error")
                  sys.exit()
-           #TODO: stabilization for large system 
+           #Stabilization will be not used for system with atoms more than 500 or by setting max_md_cycle=1
            if len(self.atoms)>500 or max_md_cycle == 1:
               stabilized = True
               return stabilized, md_cycle 
 
+           #Update atoms
+           self.atoms=self.md_traj[-1]
            pot_energy=self.get_energy()
            self.logger.log(self.level, str(pot_energy))
            md_cycle += 1
@@ -851,11 +849,6 @@ class BasinHopping(Dynamics):
                  self.logger.log(self.level, str(self.state)+' is repeated')
                  return self.chi_deviation, True
 
-           if self.lammps:
-              md_trajectory = 'trj_lammps'
-           else:
-              md_trajectory = self.md_trajectory
-        
         self.logger.log(self.level, '--------------------------------------------')
         #except:
         #    return "MD Error During EXAFS calculation", False

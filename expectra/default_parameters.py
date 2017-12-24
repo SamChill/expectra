@@ -64,6 +64,7 @@ default_parameters=dict(
 #dictionary to store parameters for expectra
 expectra_parameters = dict(
         ncore = 2,
+        bind_methods = 'socket',
         multiple_scattering = ' ',
         rmax_path = 6.0,
         first_shell = False,
