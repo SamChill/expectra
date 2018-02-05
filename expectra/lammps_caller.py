@@ -11,6 +11,7 @@ from ase import Atoms
 #from expectra.io import read_lammps_trj, write_lammps_data
 #from lammps_ext import write_lammps_data
 from ase.calculators.lammpsrun import Prism
+import subprocess
 import os
 import sys
 import numpy
@@ -22,6 +23,7 @@ class lammps_caller:
                    specorder=None, #['Rh', 'Au']
                    data_lammps='data_lammps',
                    run_type='geo_opt',
+                   bind_methods='none'
                    ):
           self.atoms = atoms
           self.ncore = ncore
@@ -30,6 +32,7 @@ class lammps_caller:
           self.run_type = run_type
           self.logfile = 'log.lammps'
           self.trajfile = trajfile
+          self.bind_methods = bind_methods
 
 
       def get_energy(self):
@@ -70,11 +73,16 @@ class lammps_caller:
           self.rm_file(self.trajfile)
           self.rm_file(output)
           run_para = ['mpirun -n', str(self.ncore),
+                      '--bind-to', str(self.bind_methods),
                       'python', lammps_script,
                       '>', output]
           join_symbol = ' '
           run_lammps = join_symbol.join(run_para)
-          os.system(run_lammps)
+          #print run_lammps
+          #os.system(run_lammps)
+          proc = subprocess.Popen(run_lammps, shell=True, stdin=subprocess.PIPE,stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
+          #process.wait()
+          output = proc.communicate()
 
       def rm_file(self, filename):
           filename = os.getcwd()+'/'+filename

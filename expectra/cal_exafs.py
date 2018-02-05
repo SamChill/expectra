@@ -75,6 +75,26 @@ def match_x(x_std, y_src, x_src, xmin, xmax):
         i += 1
     return x_temp, y_temp
 
+def call_subprocess(cmd, inputs, shell=True, flag=["k is","chi is"]):
+    proc = subprocess.Popen(cmd, shell=shell, stdin=subprocess.PIPE,stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
+    proc.stdin.write(pickle.dumps(inputs))
+    proc.stdin.flush()
+    output,return_value = proc.communicate(), proc.returncode
+    #proc.wait()
+    if output[1] is not None:
+       print ("Error {} raised for expectra: {}".format(return_value,output[1]))
+       sys.exit()
+
+    lines = output[0].split('\n')
+    for line in lines:
+        if flag[0] in line:
+           k = numpy.array([float(element) for element in line.split('is')[1].strip().strip('[').strip(']').split(',')])
+           continue
+        if flag[1] in line:
+           chi = numpy.array([float(element) for element in line.split('is')[1].strip().strip('[').strip(']').split(',')])
+           continue
+    return k, chi
+
 class Expectra(object):
 
 
@@ -139,7 +159,7 @@ class Expectra(object):
         else:
             ignore = ''
         expectra_para = ['mpirun -n', str(self.ncore),
-                         '--bind-to', str(self.bind_methods),
+                         str(self.bind_methods),
                          'expectra', self.multiple_scattering,
                          '--rmax', str(self.rmax_path),
                          '--neighbor-cutoff', str(self.neighbor_cutoff),
@@ -156,28 +176,13 @@ class Expectra(object):
                          self.traj_filename]
         join_symbol = ' '
         expectra_cmd = join_symbol.join(expectra_para)
-        proc = subprocess.Popen(expectra_cmd, shell=True, stdin=subprocess.PIPE,stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
-        proc.stdin.write(pickle.dumps(atoms))
-        proc.stdin.flush()
-        output,return_value = proc.communicate(), proc.returncode
 
-        if output[1] is not None:
-           print ("Error {} raised for expectra: {}".format(return_value,output[1]))
-           sys.exit()
-
-        lines = output[0].split('\n')
-        for line in lines:
-            if "k is" in line:
-               k = numpy.array([float(element) for element in line.split('is')[1].strip().strip('[').strip(']').split(',')])
-               continue
-            if "chi is" in line:
-               chi = numpy.array([float(element) for element in line.split('is')[1].strip().strip('[').strip(']').split(',')])
-               continue
-            #print line
+        k, chi = call_subprocess(cmd=expectra_cmd, inputs=atoms, shell=True)
 
         if self.real_space:
-           print "Compare exafs in real space"
+           #Compare exafs with magnitude in real space: magnitued =sqrt(real**2+imag**2)
            xafsft_para = ['xafsft',
+                          '--pickle',
                           '--kmin', str(self.kmin),
                           '--kmax', str(self.kmax),
                           '--kweight', str(self.kweight),
@@ -188,32 +193,35 @@ class Expectra(object):
                           'chi.dat']
            join_symbol = ' '
            xafsft_cmd = join_symbol.join(xafsft_para)
-           print 'Fourier transformation parameters used:'
-           print '   ', xafsft_cmd
-           os.system(xafsft_cmd)
-           inputfile = 'exafs.chir'
+
+           r, mag = call_subprocess(cmd=xafsft_cmd, inputs=[k,chi], shell=True, flag=["r is","mag is"])
+           x = r
+           y = mag
            xmin = self.rmin
            xmax = self.rmax
         else:
-           #print "Compare exafs in k-space"
+           # Compare exafs in k-space
+           x = k
+           y = chi
            xmin = self.kmin
            xmax = self.kmax
 
         if properties == 'area':
-           self.get_difference(k, chi, k_exp, chi_exp)
+           self.get_difference(x, y, k_exp, chi_exp, xmin, xmax)
            return self.area_diff, k, chi
         else:
            save_result(k, chi, 'chi.dat')
            print "EXAFS Calculation is done. Data is stored in 'Chi.dat'."
 
-    def get_difference(self, k=None, chi=None, k_exp=None, chi_exp=None):
+    def get_difference(self, k=None, chi=None, k_exp=None, chi_exp=None, xmin=None, xmax=None):
         #self.traj_filename = filename
         x_thy, y_thy = k, chi
         x_exp, y_exp = k_exp, chi_exp
 
-        xmin = self.kmin
-        xmax = self.kmax
-        y_thy = numpy.multiply(y_thy, numpy.power(x_thy, self.kweight))
+        #xmin = self.kmin
+        #xmax = self.kmax
+        if not self.real_space:
+           y_thy = numpy.multiply(y_thy, numpy.power(x_thy, self.kweight))
         #interpolate chi_exp values based on k values provided in calculated data
         x_exp, y_exp = match_x(x_thy, y_exp, x_exp, xmin, xmax)
         x_thy, y_thy = match_x(x_thy, y_thy, x_thy, xmin, xmax)
