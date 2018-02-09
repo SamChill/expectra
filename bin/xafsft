@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 import argparse
-
+import sys
 from expectra.io import read_chi, write_chir
 from expectra.feff import load_chi_dat
 from expectra.fft import xafsft, hanning_window
-
+import cPickle as pickle
 import numpy
 
 def main():
@@ -19,35 +19,49 @@ def main():
     parser.add_argument('--ft-part', type=str, default='mag')
 
     parser.add_argument('--output', '-o', type=str, default='exafs.chir')
-
+    parser.add_argument('--pickle', action='store_true',
+            help='k and chi are passed from parent process via subprocess')
     parser.add_argument('chis', metavar='exafs.chi', nargs='+')
 
     args = parser.parse_args()
 
     chi_r_total = None
-    for chi in args.chis:
-
-        try:
-            k, chi = read_chi(chi) 
-        except:
-            k, chi = load_chi_dat(chi)
-
-        window = hanning_window(k, args.kmin, args.kmax, args.dk)
-        chi *= window
-
-        r, chi_r = xafsft(args.rmin, args.rmax, k, chi, args.kweight)
-        if chi_r_total == None:
-            chi_r_total = chi_r
-        else:
-            chi_r_total += chi_r
-    chi_r_total /= float(len(args.chis))
-
-    if args.ft_part[0] == 'm':
-        write_chir(args.output, r, numpy.abs(chi_r_total))
-    elif args.ft_part[0] == 'i':
-        write_chir(args.output, r, numpy.imag(chi_r_total))
-    elif args.ft_part[0] == 'r':
-        write_chir(args.output, r, numpy.real(chi_r_total))
+    
+    if not args.pickle:
+       for chi in args.chis:
+      
+           try:
+               k, chi = read_chi(chi) 
+           except:
+               k, chi = load_chi_dat(chi)
+      
+           window = hanning_window(k, args.kmin, args.kmax, args.dk)
+           chi *= window
+      
+           r, chi_r = xafsft(args.rmin, args.rmax, k, chi, args.kweight)
+           if chi_r_total == None:
+               chi_r_total = chi_r
+           else:
+               chi_r_total += chi_r
+       chi_r_total /= float(len(args.chis))
+    else:
+       k, chi=pickle.Unpickler(sys.stdin).load()
+       window = hanning_window(k, args.kmin, args.kmax, args.dk)
+       chi *= window
+      
+       r, chi_r = xafsft(args.rmin, args.rmax, k, chi, args.kweight)
+       chi_r_total = chi_r
+       
+    if pickle:
+       print(('r is {}').format(r.tolist()))
+       print(('mag is {}').format(numpy.abs(chi_r_total).tolist()))
+    else:
+       if args.ft_part[0] == 'm':
+           write_chir(args.output, r, numpy.abs(chi_r_total))
+       elif args.ft_part[0] == 'i':
+           write_chir(args.output, r, numpy.imag(chi_r_total))
+       elif args.ft_part[0] == 'r':
+           write_chir(args.output, r, numpy.real(chi_r_total))
 
 if __name__ == '__main__':
     main()

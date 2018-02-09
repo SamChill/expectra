@@ -110,14 +110,15 @@ def main():
     args.absorber = get_default_absorber(trajectory[0], args)
 
     k, chi = exafs_trajectory(args, trajectory)
-    if len(args.trajectories)>1:
-       save_result(k, chi)
-    else:
+    print len(args.trajectories)
+    if len(args.trajectories)==0:
        if COMM_WORLD.rank == 0:
           print(('k is {}').format(k.tolist()))
           print(('chi is {}').format(chi.tolist()))
        else:
           sys.exit()
+    else:
+       save_result(k, chi)
 
 def save_result(k, chi):
     if COMM_WORLD.rank != 0: return
