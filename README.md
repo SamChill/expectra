@@ -23,6 +23,7 @@ fine structure", *Phys. Rev. Lett.* **69**, 3397 (1992).
 * Python
   * numpy
   * mpi4py
+  * [ASE](https://wiki.fysik.dtu.dk/ase/)
 
 ## Installation
 
