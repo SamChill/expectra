@@ -50,9 +50,9 @@ def harmonic_sampler(atoms, ews, evs, masses, temperature, iters, qho=False, rng
     hbar = pq.constants.hbar
     kB = pq.constants.Boltzmann_constant
 
-    for iter in xrange(iters):
+    for iter in range(iters):
         r = r0.copy()
-        for j in xrange(len(ews)):
+        for j in range(len(ews)):
             # Ignore negative and small modes.
             if ews[j] < 1e-2: continue
 

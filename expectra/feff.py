@@ -116,7 +116,7 @@ def load_feff_dat(filename):
 def write_feff(filename, atoms, absorber, feff_options={}):
     f = open(filename, "w")
     f.write("TITLE %s\n" % str(atoms))
-    for key, value in feff_options.iteritems():
+    for key, value in feff_options.items():
         f.write("%s %s\n" % (key, value))
     f.write("\nPOTENTIALS\n")
     absorber_z = atoms[absorber].number
@@ -161,7 +161,7 @@ def absorber_sphere(atoms, absorber, radius):
     pos = atoms.get_positions()
     elements = atoms.get_chemical_symbols()
     atoms_sphere = [Atom(elements[absorber], (0.,0.,0.))]
-    for i in xrange(len(atoms)):
+    for i in range(len(atoms)):
         if i == absorber: continue
         r = pbc(pos[i] - pos[absorber], box, ibox)
         d = numpy.linalg.norm(r)
@@ -183,7 +183,8 @@ def run_feff(atoms, absorber, feff_options={}, tmp_dir=None, get_path=False):
 
     try:
         p = subprocess.Popen(["feff"], cwd=tmp_dir_path,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True)
     except OSError:
         from sys import exit, stderr
         stderr.write('unable to locate feff executable in PATH\n')
@@ -192,9 +193,9 @@ def run_feff(atoms, absorber, feff_options={}, tmp_dir=None, get_path=False):
 
     #function to deal with errors
     def feff_error():
-        print 'Problem with feff calculation in %s' % tmp_dir_path
+        print('Problem with feff calculation in %s' % tmp_dir_path)
         tmp_f = tempfile.NamedTemporaryFile(dir='.', prefix='feff.inp.')
-        print 'feff.inp saved to:', tmp_f.name
+        print('feff.inp saved to:', tmp_f.name)
         tmp_f.close()
         write_feff(tmp_f.name, atoms, absorber, feff_options)
         shutil.rmtree(tmp_dir_path)

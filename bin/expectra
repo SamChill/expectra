@@ -64,13 +64,13 @@ def main():
     trajectory = []
     if COMM_WORLD.rank == 0:
         for filename in args.trajectories:
-            print 'reading', filename
+            print('reading', filename)
             if filename[-3:] == 'con':
                 trajectory_part = read_con(filename)[args.skip::args.every]
             else:
                 trajectory_part = read_xdatcar(filename, args.skip, args.every)
             n = len(trajectory_part)
-            print 'read %4i configurations from %s' % (n, filename)
+            print('read %4i configurations from %s' % (n, filename))
             trajectory += trajectory_part
     trajectory = COMM_WORLD.bcast(trajectory)
 
@@ -81,9 +81,9 @@ def main():
 
 def save_result(k, chi):
     if COMM_WORLD.rank != 0: return
-    print 'saving result to chi.dat'
+    print('saving result to chi.dat')
     f = open('chi.dat', 'w')
-    for i in xrange(len(k)):
+    for i in range(len(k)):
         f.write("%6.3f %16.8e\n" % (k[i], chi[i]))
     f.close()
 
@@ -91,7 +91,7 @@ def get_default_absorber(atoms, args):
     symbols = set(atoms.get_chemical_symbols())
     if args.absorber:
         if args.absorber not in symbols:
-            print 'ERROR: --absorber %s is not in the system' % args.absorber
+            print('ERROR: --absorber %s is not in the system' % args.absorber)
             sys.exit(2)
         else:
             return args.absorber
@@ -100,7 +100,7 @@ def get_default_absorber(atoms, args):
     if len(symbols) == 1:
         return list(symbols)[0]
     else:
-        print 'ERROR: must specify --absorber if more than one chemical specie'
+        print('ERROR: must specify --absorber if more than one chemical specie')
         sys.exit(2)
 
 def exafs_trajectory(args, trajectory):

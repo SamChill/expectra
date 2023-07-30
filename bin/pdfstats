@@ -70,7 +70,7 @@ class Accumulator:
         elif x > self.max:
             self.max = x
 
-        for i in xrange(1,5):
+        for i in range(1,5):
             self.sums[i] += x**float(i)
 
     def mean(self):
@@ -115,27 +115,27 @@ class Accumulator:
         return r
 
     def describe_short(self):
-        print 'min: %.3f' % self.min,
-        print 'max: %.3f' % self.max,
-        print 'avg: %.3f' % self.mean(),
-        print 'var: %.5f' % self.var(),
-        print 'c3: %.3e' % self.cumulant(3),
-        print 'c4: %.3e' % self.cumulant(4),
-        print
+        print('min: %.3f' % self.min, end=' ')
+        print('max: %.3f' % self.max, end=' ')
+        print('avg: %.3f' % self.mean(), end=' ')
+        print('var: %.5f' % self.var(), end=' ')
+        print('c3: %.3e' % self.cumulant(3), end=' ')
+        print('c4: %.3e' % self.cumulant(4), end=' ')
+        print()
 
     def describe(self):
-        print 'min:          %f' % self.min
-        print 'max:          %f' % self.max
-        print 'mean:         %f' % self.mean()
-        print 'variance:     %f' % self.var()
-        print '3rd cumulant: %f' % self.cumulant(3)
-        print '4th cumulant: %f' % self.cumulant(4)
+        print('min:          %f' % self.min)
+        print('max:          %f' % self.max)
+        print('mean:         %f' % self.mean())
+        print('variance:     %f' % self.var())
+        print('3rd cumulant: %f' % self.cumulant(3))
+        print('4th cumulant: %f' % self.cumulant(4))
 
 def snapshots_command(args):
     trajectory = []
-    print 'neighbor-cutoff of %.2f Angstrom' % args.neighbor_cutoff
+    print('neighbor-cutoff of %.2f Angstrom' % args.neighbor_cutoff)
     for filename in args.trajectories:
-        print 'reading', filename
+        print('reading', filename)
         if filename[-3:] == 'con':
             trajectory += read_con(filename)[args.skip::args.every]
         elif filename.startswith('POSCAR') or filename.startswith('CONTCAR'):
@@ -156,7 +156,7 @@ def snapshots_command(args):
                     self_interaction=False, bothways=False)
         nl.update(atoms)
 
-        for j in xrange(len(atoms)):
+        for j in range(len(atoms)):
             indicies, offsets = nl.get_neighbors(j)
             for k, offset in zip(indicies, offsets):
                 r = numpy.linalg.norm(atoms.positions[j] - (atoms.positions[k] + numpy.dot(offset, atoms.get_cell())))
@@ -166,7 +166,7 @@ def snapshots_command(args):
                 if r <= args.neighbor_cutoff_min: continue
                 acc.push(r)
 
-        print '%4i/%i: N: %.2f' % (i+1,len(trajectory),2*acc.N/(float(i+1)*len(atoms))),
+        print('%4i/%i: N: %.2f' % (i+1,len(trajectory),2*acc.N/(float(i+1)*len(atoms))), end=' ')
         try:
             acc.describe_short()
         except:

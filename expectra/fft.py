@@ -21,7 +21,7 @@ def xafsft(r_min, r_max, xk, ccpath, kweight=0):
     chi_r = np.fft.fft(cnorm*ccpath, n=nfft)
 
     delta_r = np.pi/(nfft*delta_k)                                              
-    r = np.array([ i*delta_r for i in xrange(len(chi_r)) ])
+    r = np.array([ i*delta_r for i in range(len(chi_r)) ])
     ir_min = np.argmin(np.abs(r_min-r))
     ir_max = np.argmin(np.abs(r_max-r))
 

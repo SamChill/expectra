@@ -76,3 +76,39 @@ optional arguments:
   --skip SKIP           number of frames to skip at the beginning
   --every EVERY         number of frames to between each step
 ```
+
+## Installing from source
+
+If installing Expectra from source instead of `pip`, clone the source code
+from [GitHub](https://github.com/SamChill/expectra):
+
+```
+git clone https://github.com/SamChill/expectra.git
+```
+
+After all the dependency requirements have been satisfied, build the `feff` binary,
+and move it to `bin/`:
+
+```
+cd expectra/feff
+
+# To use ifort instead of gfortran, set FC=ifort in ./Makefile
+
+make clean
+make  # should create the feff binary
+
+mv ./feff ../bin
+```
+
+Finally, set relevant environmental variables (assuming Expectra was installed at `$HOME`):
+
+```
+# consider including these in ~/.bash_profile, ~/.profile, or ~/.bashrc
+export PATH=$HOME/expectra/bin:$PATH
+export PYTHONPATH=$HOME/expectra:$PYTHONPATH
+```
+
+## Note from developers
+
+Expectra was recently migrated from Python2 to Python3.
+Please report any bugs to [sunghjung3@utexas.edu](sunghjung3@utexas.edu).

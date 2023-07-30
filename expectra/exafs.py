@@ -91,7 +91,7 @@ def exafs_first_shell(S02, energy_shift, absorber,
     for step, atoms in enumerate(trajectory):
         if COMM_WORLD.rank == 0:
             time_stamp = strftime("%F %T")
-            print '[%s] step %i/%i' % (time_stamp, step+1, len(trajectory))
+            print('[%s] step %i/%i' % (time_stamp, step+1, len(trajectory)))
         atoms = atoms.copy()
         if ignore_elements:
             ignore_indicies = [atom.index for atom in atoms
@@ -102,7 +102,7 @@ def exafs_first_shell(S02, energy_shift, absorber,
                     self_interaction=False)
         nl.update(atoms)
 
-        for i in xrange(len(atoms)):
+        for i in range(len(atoms)):
             if atoms[i].symbol != absorber:
                 continue
             indicies, offsets = nl.get_neighbors(i)
@@ -141,14 +141,14 @@ def exafs_multiple_scattering(S02, energy_shift, absorber,
     for step, atoms in enumerate(trajectory):
         if COMM_WORLD.rank == 0:
             time_stamp = strftime("%F %T")
-            print '[%s] step %i/%i' % (time_stamp, step+1, len(trajectory))
+            print('[%s] step %i/%i' % (time_stamp, step+1, len(trajectory)))
         atoms = atoms.copy()
         if ignore_elements:
             ignore_indicies = [atom.index for atom in atoms
                                if atom.symbol in ignore_elements]
             del atoms[ignore_indicies]
 
-        for i in xrange(len(atoms)):
+        for i in range(len(atoms)):
             counter += 1
             if counter % COMM_WORLD.size != COMM_WORLD.rank:
                 continue
