@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 from setuptools import setup
 from distutils.command.build import build
-import subprocess, os, stat
+import subprocess, os, stat, shutil
+
 
 class build_feff(build):
     def run(self):
@@ -9,6 +10,8 @@ class build_feff(build):
         # ensure the binary is executable
         st = os.stat('feff/feff')
         os.chmod('feff/feff', st.st_mode | stat.S_IEXEC)
+        # move to package dir
+        shutil.move('feff/feff', 'expectra/feff')
 
 class build_custom(build):
     def run(self):
@@ -17,7 +20,7 @@ class build_custom(build):
 
 try:
    import pypandoc
-   long_description = pypandoc.convert('README.md', 'rst')
+   long_description = pypandoc.convert_file('README.md', 'rst')
 except (IOError, ImportError):
    long_description = ''
 
@@ -26,7 +29,7 @@ description = 'Code for simulating EXAFS calculations from molecular ' \
 
 setup(
     name='expectra',
-    version='1.0.0',
+    version='1.0.2',
     author='Samuel T. Chill',
     author_email='samchill@gmail.com',
     url='https://github.com/SamChill/expectra',
