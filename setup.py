@@ -29,7 +29,7 @@ description = 'Code for simulating EXAFS calculations from molecular ' \
 
 setup(
     name='expectra',
-    version='1.0.2',
+    version='1.0.3',
     author='Samuel T. Chill',
     author_email='samchill@gmail.com',
     url='https://github.com/SamChill/expectra',
@@ -43,7 +43,7 @@ setup(
     ],
     package_data={
         'expectra': ['feff'],
-    }
+    },
     license='LICENSE.txt',
     description=description,
     long_description=long_description,
