@@ -1,0 +1,15 @@
+#!/usr/bin/env python
+import subprocess, os, sys
+
+
+# get the path of this wrapper script
+dir_path = os.path.dirname(os.path.realpath(__file__))
+# path to the feff binary
+feff_bin = os.path.join(dir_path, '..', 'feff', 'feff')
+
+# call the feff binary with the same arguments
+proc = subprocess.Popen([feff_bin] + sys.argv[1:])
+returncode = proc.wait()
+
+# Use the exit code of the feff process as the exit code of this script
+sys.exit(proc.returncode)
