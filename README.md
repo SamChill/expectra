@@ -87,7 +87,7 @@ git clone https://github.com/SamChill/expectra.git
 ```
 
 After all the dependency requirements have been satisfied, build the `feff` binary,
-and move it to `bin/`:
+and move it to `expectra/expectra/`:
 
 ```
 cd expectra/feff
@@ -97,7 +97,7 @@ cd expectra/feff
 make clean
 make  # should create the feff binary
 
-mv ./feff ../bin
+mv ./feff ../expectra
 ```
 
 Finally, set relevant environmental variables (assuming Expectra was installed at `$HOME`):
