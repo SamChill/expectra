@@ -41,6 +41,9 @@ setup(
         'bin/pdfstats',
         'bin/feff',
     ],
+    package_data={
+        'expectra': ['feff'],
+    }
     license='LICENSE.txt',
     description=description,
     long_description=long_description,
